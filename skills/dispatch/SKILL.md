@@ -33,6 +33,9 @@ absolute path. It wraps worktrunk (`wt`) and prints JSON.
    agent.
 6. **Merge one task at a time:**
    `orch-wt merge <F> <T> --message "<conventional commit message>"`.
+   The message is the full commit message: include any trailers your
+   instructions require (e.g. `Co-Authored-By`). Never rewrite merged commits
+   afterwards.
    - `status: merged` → next task.
    - `status: conflict` → the rebase was aborted and the worktree kept. Resolve
      it yourself in the worktree, or resume the task's implementer with the
