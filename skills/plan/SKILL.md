@@ -46,7 +46,8 @@ Base branch: <F>   # the branch the tasks merge into
 - Each task is 1 implementer-sized unit: one edit-and-test loop, not a project.
 - `validate` runs inside the task's own worktree and must not need other
   unmerged tasks.
-- Prefer fewer, larger tasks over many tiny ones; parallelism costs tokens.
+- Don't split one feature into many tiny tasks. Separate features stay separate
+  tasks, even when each one is small.
 
 ## After writing
 

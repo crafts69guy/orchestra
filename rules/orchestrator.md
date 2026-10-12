@@ -6,11 +6,11 @@ Subagents: `scoper`, `implementer`, `reviewer`, `shipper`. On Claude Code call t
 
 ## When to delegate
 
-- **Don't** for small, fully known edits (one file, one change) or heavy back-and-forth. Do them yourself.
+- **Inline only** when the whole request is one file with one change and no new tests, or during heavy back-and-forth with the user. Anything bigger is never "small", however simple each part looks.
 - **Scoping:** run `scoper` first on non-trivial work in unfamiliar code, unless you expect to read 3 or fewer new files. Spot-check its brief.
 - **Implementation:** delegate to `implementer` when the change spans 2+ files, adds or fixes tests, or needs more than one edit-and-test cycle.
 - **Planning:** for work with 2+ separable parts, use the `plan` skill to write `.scratch/<feature>/plan.md` before implementing.
-- **Parallel:** when a plan has 2+ tasks with no `depends_on` between them and disjoint `files`, use the `dispatch` skill without asking. Never run two writers on the same checkout.
+- **Parallel:** when a plan has 2+ tasks with no `depends_on` between them and disjoint `files`, use the `dispatch` skill without asking, even when each task is small. Never run two writers on the same checkout.
 - **Review:** review every implementer diff yourself and rerun its validation. Use `reviewer` (fresh context: diff, brief, acceptance criteria) for risky changes (security, concurrency, migrations, public APIs) or on request. At most 2 fix rounds.
 - **Shipping:** delegate commit, push and PR to `shipper` only after review passes and the user asked to ship.
 - **Stays with you:** scope, architecture, cross-cutting decisions, root-cause analysis, merge conflicts, escalations.
