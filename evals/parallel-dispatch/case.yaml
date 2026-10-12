@@ -42,7 +42,8 @@ graders:
   - name: merged-via-orch-wt
     type: tool_used
     tool: Bash
-    input_match: 'orch-wt(?:\\")?\s+merge\s'
+    # `orch wt merge` on PATH, or the absolute `<root>/bin/orch` path (optionally quoted)
+    input_match: '(?:^|[\s"/])orch(?:\\")?\s+wt\s+merge\s'
     min: 2
   - name: two-conventional-commits
     type: regex

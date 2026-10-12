@@ -12,7 +12,10 @@ Contributor guide for this repo. Node >= 22.8, ESM, zero runtime dependencies.
   fail on drift without writing (CI does this).
 - `npm run check` runs lint, the generator staleness check and tests.
 - `npm run validate` runs `claude plugin validate .`.
-- `npm run eval` runs the behaviour evals (below). Not part of `check` or CI.
+- `npm run eval` (or `orch eval`) runs the behaviour evals (below). Not part of `check` or CI.
+- `bin/orch <subcommand>` runs the CLI from the checkout (`bin/orch doctor`, `bin/orch --help`);
+  `npm link` puts it on `PATH` as `orch`.
+- `npm pack --dry-run` lists what the npm package ships (`files` in `package.json`).
 
 ## Conventions
 
@@ -41,12 +44,19 @@ body (`developer_instructions`). `model` is not mapped, so Codex inherits the us
 `codex-sandbox` key overrides it: `read-only`, `workspace-write`, or `inherit` (omit `sandbox_mode`).
 `agents/shipper.md` uses `inherit` because it needs to write `.git`.
 
+## CLI
+
+`bin/orch` is a thin shim; `scripts/orch.mjs` routes subcommands to `scripts/orch-wt.mjs`
+(`orch wt`), `scripts/orch-codex.mjs` (`orch codex`) and `scripts/doctor.mjs` (`orch doctor`),
+and runs `orch claude` and `orch eval` itself. Each module takes its process, filesystem and
+spawn dependencies as arguments. See [ADR-0005](docs/adr/0005-orch-cli.md).
+
 ## Codex launcher
 
-`bin/orch-codex` (logic in `scripts/orch-codex.mjs`) is a thin shim like `bin/orch-wt`. It reuses
-`readRules` and `buildContext` from `hooks/session-start.mjs`, so the Codex context cannot drift
-from the Claude hook. Per-run `-c` overrides are used instead of editing `~/.codex/config.toml`.
-Note that `codex exec -s workspace-write` itself persists project trust in `~/.codex/config.toml`.
+`orch codex` (logic in `scripts/orch-codex.mjs`) reuses `readRules` and `buildContext` from
+`hooks/session-start.mjs`, so the Codex context cannot drift from the Claude hook. Per-run `-c`
+overrides are used instead of editing `~/.codex/config.toml`. Note that
+`codex exec -s workspace-write` itself persists project trust in `~/.codex/config.toml`.
 
 ## Behaviour evals
 
@@ -58,7 +68,7 @@ repo on branch `feat/x` and runs with the plugin and again without it (the basel
 |---|---|
 | `inline-small` | one-line fix done inline: no Agent call, tests pass |
 | `delegate-multi` | two dependent files + tests: `orch:implementer` spawned, no dispatch, no commit |
-| `parallel-dispatch` | two independent features: `plan` + `dispatch`, 2+ implementers, two `orch-wt merge` conventional commits, no leftover worktrees |
+| `parallel-dispatch` | two independent features: `plan` + `dispatch`, 2+ implementers, two `orch wt merge` conventional commits, no leftover worktrees |
 
 It costs real model usage on your Claude account (a full suite, 10 runs with Opus as the
 orchestrator, cost about $1.50) and needs a logged-in `claude`, `wt` and git. Narrow it with

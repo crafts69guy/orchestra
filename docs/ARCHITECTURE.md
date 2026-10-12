@@ -36,7 +36,7 @@ flowchart LR
   mcp["MCP servers<br/>cocoindex-code · context7"]
   gh["GitHub"]
 
-  user -->|"cyl --wf / cdx --wf<br/>(ORCH=1)"| orch
+  user -->|"orch claude / orch codex<br/>(ORCH=1)"| orch
   plugin -->|"SessionStart: rules"| orch
   plugin -->|"agent definitions"| subs
   pony -->|"SessionStart / SubagentStart"| orch
@@ -69,7 +69,7 @@ flowchart TB
     toml["codex/agents/*.toml<br/>(generated, committed)"]
   end
   gen["scripts/gen-codex-agents.mjs"]
-  inst["bin/orch-codex launcher<br/>-c agents.NAME.config_file"]
+  inst["orch codex launcher<br/>-c agents.NAME.config_file"]
 
   agents --> cman
   skills --> cman
@@ -97,9 +97,13 @@ orchestra/
 │   ├── session-start.mjs        # ORCH gate, rules injection, wt check
 │   ├── guard.mjs                # PreToolUse: push/PR only from shipper
 │   └── subagent-stop.mjs        # implementer evidence gate
-├── bin/orch-wt                  # worktrunk wrapper used by dispatch
-├── bin/orch-codex               # Codex launcher: rules, agents, sandbox dirs
-├── scripts/                     # orch-wt logic, Codex generator, shared lib
+├── bin/orch                     # CLI entry (npm bin): claude, codex, wt, doctor, eval
+├── scripts/
+│   ├── orch.mjs                 # subcommand dispatcher, `orch claude`
+│   ├── orch-wt.mjs              # `orch wt`: worktrunk wrapper used by dispatch
+│   ├── orch-codex.mjs           # `orch codex`: rules, agents, sandbox dirs
+│   ├── doctor.mjs               # `orch doctor`: prerequisite checks
+│   └── gen-codex-agents.mjs, lib/
 ├── test/                        # node:test, ≥98% coverage
 ├── evals/                       # claude plugin eval suites
 └── docs/{ARCHITECTURE.md, adr/, research/}
@@ -114,13 +118,13 @@ session was started with `ORCH=1` ([ADR-0003](adr/0003-env-gated-activation.md))
 sequenceDiagram
   autonumber
   actor Dev
-  participant Shell as fish (cyl --wf)
+  participant CLI as orch claude
   participant H as Harness
   participant Hook as session-start.mjs
   participant Main as Orchestrator
 
-  Dev->>Shell: cyl --wf
-  Shell->>H: ORCH=1 claude --model opus …
+  Dev->>CLI: orch claude [--yolo] [args]
+  CLI->>H: ORCH=1 claude --model opus …
   H->>Hook: SessionStart (startup/resume/clear/compact)
   alt ORCH != 1
     Hook-->>H: exit 0, no output
@@ -134,19 +138,51 @@ sequenceDiagram
 
 Re-injection on `compact` keeps the rules alive after context compaction.
 
-On Codex, hooks only run after the user trusts them, so `bin/orch-codex`
+The context ends with the absolute path of `orch`, so agents can call
+`orch wt` even where the plugin's `bin/` is not on `PATH`.
+
+On Codex, hooks only run after the user trusts them, so `orch codex`
 carries the same context without hooks:
 
 ```mermaid
 flowchart LR
-  cdx["cdx --wf"] --> launcher["bin/orch-codex"]
+  dev(["orch codex [--yolo]"]) --> launcher["scripts/orch-codex.mjs"]
   launcher -->|"ORCH=1"| codex["codex"]
-  launcher -->|"-c developer_instructions=rules + helper path"| codex
+  launcher -->|"-c developer_instructions=rules + orch path"| codex
   launcher -->|"-c agents.NAME.config_file / description"| codex
   launcher -->|"--add-dir GIT_COMMON_DIR"| codex
 ```
 
-## 5. Roles
+## 5. CLI
+
+`orch` is one Node entry point (`bin/orch`), shipped as the npm package
+`@crafts69guy/orchestra` and inside the plugin
+([ADR-0005](adr/0005-orch-cli.md)). It replaces the old `bin/orch-wt` and
+`bin/orch-codex` shims and the dotfiles' `cyl --wf` / `cdx --wf` wrappers.
+
+```mermaid
+flowchart LR
+  bin["bin/orch"] --> disp["scripts/orch.mjs<br/>dispatcher"]
+  disp -->|"claude [--yolo]"| claude["claude<br/>ORCH=1, --model opus"]
+  disp -->|"codex [--yolo]"| ocx["scripts/orch-codex.mjs"] --> codex["codex"]
+  disp -->|"wt new · merge · list"| owt["scripts/orch-wt.mjs"] --> wt["worktrunk + git"]
+  disp -->|"doctor"| doc["scripts/doctor.mjs"]
+  disp -->|"eval"| ev["evals/_support/run.sh<br/>(git checkout only)"]
+  disp -->|"--help · --version"| pkg["usage, package.json"]
+```
+
+| Command | Does |
+|---|---|
+| `orch claude [--yolo] [args]` | runs `claude` with `ORCH=1`; adds `--model opus` unless `--model` is given; `--yolo` → `--dangerously-skip-permissions` |
+| `orch codex [--yolo] [args]` | Codex launcher (§4); `--yolo` → `--dangerously-bypass-approvals-and-sandbox` |
+| `orch wt new\|merge\|list` | worktree helper for dispatch (§8) |
+| `orch doctor` | checks node, git, `wt`, a harness and the installed plugins; exit 1 if a required check fails |
+| `orch eval [args]` | behaviour evals; exits 1 when `evals/` is absent (npm install) |
+
+Exit codes pass through from the child (a signal becomes 1); a missing
+`claude` or `codex` binary exits 127. Permission bypass is never the default.
+
+## 6. Roles
 
 | Role | Model / effort | Tools | Writes? | Notes |
 |---|---|---|---|---|
@@ -162,9 +198,9 @@ inherit Opus.
 
 Plugin-shipped Claude agents ignore `permissionMode`, `hooks` and `mcpServers`,
 and Codex agents have no per-agent tool allowlist (only `sandbox_mode`). Hard
-guarantees therefore live in plugin hooks (§8), not in agent frontmatter.
+guarantees therefore live in plugin hooks (§9), not in agent frontmatter.
 
-## 6. Orchestration lifecycle
+## 7. Orchestration lifecycle
 
 ```mermaid
 flowchart TD
@@ -207,7 +243,7 @@ The orchestrator computes waves from `depends_on`; tasks in one wave must have
 disjoint `files`. Cross-cutting decisions are written into `decisions` before
 dispatch so parallel workers never make conflicting implicit choices.
 
-## 7. Parallel dispatch with worktrunk
+## 8. Parallel dispatch with worktrunk
 
 Worktrees are created explicitly by the orchestrator through worktrunk on both
 harnesses ([ADR-0002](adr/0002-worktrunk-for-worktrees.md)). Native Claude
@@ -224,7 +260,7 @@ sequenceDiagram
   participant I2 as implementer T2
   participant G as git
 
-  O->>WT: orch-wt new F T1 T2
+  O->>WT: orch wt new F T1 T2
   WT->>G: wt switch -c F--Tn --base F --no-cd (.worktrees/, pre-start hooks)
   par one message, ≤4 per wave
     O->>I1: brief + worktree path
@@ -233,9 +269,9 @@ sequenceDiagram
   I1-->>O: Status done + evidence (uncommitted)
   I2-->>O: Status done + evidence (uncommitted)
   O->>O: review each diff
-  O->>WT: orch-wt merge F T1 --message "feat: …"
+  O->>WT: orch wt merge F T1 --message "feat: …"
   WT->>G: commit → merge-tree pre-check → wt merge --no-commit (rebase, pre-merge, ff, remove)
-  O->>WT: orch-wt merge F T2 --message "fix: …"
+  O->>WT: orch wt merge F T2 --message "fix: …"
   alt conflict (exit 2)
     WT-->>O: status conflict, rebase aborted, worktree kept
     O->>O: resolve, or resume implementer T2
@@ -246,15 +282,17 @@ sequenceDiagram
 Result: one squashed commit per task on `F`; the shipper only pushes and opens
 the PR.
 
-### `orch-wt` helper (verified in P0)
+### `orch wt` (verified in P0)
 
-`bin/orch-wt` wraps worktrunk so the agent never composes these by hand. The
-SessionStart hook prints its absolute path, which works on both harnesses.
+`orch wt` (`scripts/orch-wt.mjs`) wraps worktrunk so the agent never composes
+these by hand. The SessionStart hook prints the absolute path of `orch`, which
+works on both harnesses.
 
 | Command | Does |
 |---|---|
-| `orch-wt new <F> <T>… [--yes]` | ignores `.worktrees/` via `.git/info/exclude`, then `wt --config-set 'worktree-path=".worktrees/{{ branch \| sanitize }}"' switch -c <F>--<T> --base <F> --no-cd --format=json`; prints `[{task, branch, path}]` |
-| `orch-wt merge <F> <T> --message <msg> [--yes]` | commits with the orchestrator's message (squashing extra commits), pre-checks with `git merge-tree --write-tree`, then `wt merge <F> --no-commit`; prints `merged` with the commit, or `conflict` with files (exit 2, rebase aborted) |
+| `orch wt new <F> <T>… [--yes]` | ignores `.worktrees/` via `.git/info/exclude`, then `wt --config-set 'worktree-path=".worktrees/{{ branch \| sanitize }}"' switch -c <F>--<T> --base <F> --no-cd --format=json`; prints `[{task, branch, path}]` |
+| `orch wt merge <F> <T> --message <msg> [--yes]` | commits with the orchestrator's message (squashing extra commits), pre-checks with `git merge-tree --write-tree`, then `wt merge <F> --no-commit`; prints `merged` with the commit, or `conflict` with files (exit 2, rebase aborted) |
+| `orch wt list <F>` | prints `[{task, branch, path}]` for the worktrees whose branch is `<F>--<task>` |
 
 Design notes from P0:
 
@@ -284,7 +322,7 @@ stateDiagram-v2
   merged --> [*]
 ```
 
-## 8. Enforcement layers
+## 9. Enforcement layers
 
 Prompts set intent; hooks guarantee the few things that must never go wrong.
 
@@ -307,12 +345,12 @@ flowchart LR
 Codex requires the user to trust plugin hooks first, so the skills restate the
 critical rules instead of relying on hooks alone.
 
-## 9. Harness adapter matrix
+## 10. Harness adapter matrix
 
 | Capability | Claude Code | Codex CLI | Orchestra approach |
 |---|---|---|---|
 | Plugin manifest | `.claude-plugin/plugin.json` | `.codex-plugin/plugin.json` (also reads Claude's) | ship both |
-| Agents in plugin | `agents/*.md` | not supported | generate TOML; `cdx --wf` passes `-c agents.<n>.config_file=…` |
+| Agents in plugin | `agents/*.md` | not supported | generate TOML; `orch codex` passes `-c agents.<n>.config_file=…` |
 | Agent addressing | `orch:<role>` (bare name not found) | bare `<role>`; unknown name silently falls back | rules name both forms |
 | Spawn | Agent tool, parallel in one message | `spawn_agent` + `wait_agent`, only when told | dispatch skill + per-harness reference |
 | Per-agent tools | `tools` / `disallowedTools` | `sandbox_mode` only | allowlists on Claude, read-only sandbox on Codex |
@@ -321,7 +359,7 @@ critical rules instead of relying on hooks alone.
 | `agent_type` in hooks | `orch:<role>` | `<role>` | hooks strip the `<plugin>:` prefix |
 | Plugin dependencies | `dependencies` | none | ponytail declared on Claude, documented on Codex |
 
-## 10. Quality strategy
+## 11. Quality strategy
 
 | Gate | Tool | Threshold |
 |---|---|---|
@@ -331,19 +369,19 @@ critical rules instead of relying on hooks alone.
 | Lint (Markdown) | markdownlint-cli2 | no diagnostics |
 | Plugin manifest | `claude plugin validate .` | passes |
 | Generated adapters | `gen-codex-agents --check` (P3) | no diff |
-| Behaviour | `npm run eval` (`claude plugin eval`, manual, costs money) | delegate / don't-delegate / parallel cases beat baseline |
+| Behaviour | `npm run eval` / `orch eval` (`claude plugin eval`, manual, costs money) | delegate / don't-delegate / parallel cases beat baseline |
 
 Hook scripts are small exported pure functions behind a thin `main`, so
 coverage reflects real logic rather than exclusions.
 
-## 11. P0 verification and roadmap
+## 12. P0 verification and roadmap
 
 All open questions were tested against real CLIs on 2026-10-12
 ([evidence](research/p0-findings.md)).
 
 | ID | Result | Consequence |
 |---|---|---|
-| W1–W5 | pass | `orch-wt` command shapes above |
+| W1–W5 | pass | `orch wt` command shapes above |
 | C1 | pass with `-c agents.<n>.config_file` (or a trusted project) | no Codex install step |
 | C2 | fails by default | Codex launcher adds `--add-dir <repo>/.git` |
 | C3 | partial: hooks need trust (or `--dangerously-bypass-hook-trust`) | skills and agent TOMLs restate critical rules |
@@ -356,7 +394,7 @@ All open questions were tested against real CLIs on 2026-10-12
 |---|---|---|
 | P0 | Verify the questions above | done |
 | P1 | Tooling, manifests, agents, rules, SessionStart hook | done |
-| P2 | `plan` + `dispatch` skills, `orch-wt`, guard and gate hooks | done |
-| P3 | Codex adapter: generator, `bin/orch-codex` launcher | done |
+| P2 | `plan` + `dispatch` skills, worktree helper (now `orch wt`), guard and gate hooks | done |
+| P3 | Codex adapter: generator, launcher (now `orch codex`) | done |
 | P4 | Evals, `claude plugin tag`, public release | done (v0.2.0) |
-| P5 | Unified `orch` CLI (`orch claude \| codex \| wt \| doctor \| eval`), npm package; dotfiles drop the `--wf` wrappers ([#1](https://github.com/crafts69guy/orchestra/issues/1)) | todo |
+| P5 | Unified `orch` CLI (`orch claude \| codex \| wt \| doctor \| eval`), npm package; dotfiles drop the `--wf` wrappers ([#1](https://github.com/crafts69guy/orchestra/issues/1)) | done (v0.3.0) |

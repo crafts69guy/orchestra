@@ -75,14 +75,9 @@ test('which finds executables on PATH only', () => {
 });
 
 test('buildContext appends the worktrunk warning only when wt is missing', () => {
-  assert.equal(
-    buildContext('# R\n', true, '/p/bin/orch-wt'),
-    '# R\n\norch helper: /p/bin/orch-wt\n',
-  );
-  assert.equal(
-    buildContext('# R\n\n', false, '/p/bin/orch-wt'),
-    `# R\n\norch helper: /p/bin/orch-wt\n\n${WT_WARNING}\n`,
-  );
+  const cli = 'orch CLI: /p/bin/orch (use `/p/bin/orch wt new|merge|list`)\n';
+  assert.equal(buildContext('# R\n', true, '/p/bin/orch'), `# R\n\n${cli}`);
+  assert.equal(buildContext('# R\n\n', false, '/p/bin/orch'), `# R\n\n${cli}\n${WT_WARNING}\n`);
   assert.match(WT_WARNING, /brew install worktrunk/);
 });
 
@@ -106,7 +101,8 @@ test('run injects the rules when ORCH=1 and wt is present', () => {
   });
   assert.equal(run(deps), 0);
   const ctx = JSON.parse(out.stdout).hookSpecificOutput.additionalContext;
-  assert.equal(ctx, `# RULES\n\norch helper: ${join(deps.root, 'bin', 'orch-wt')}\n`);
+  const orch = join(deps.root, 'bin', 'orch');
+  assert.equal(ctx, `# RULES\n\norch CLI: ${orch} (use \`${orch} wt new|merge|list\`)\n`);
   assert.equal(out.stderr, '');
 });
 
@@ -115,7 +111,7 @@ test('run warns about worktrunk when wt is missing', () => {
   assert.equal(run(deps), 0);
   const ctx = JSON.parse(out.stdout).hookSpecificOutput.additionalContext;
   assert.ok(
-    ctx.startsWith('# RULES') && ctx.includes('orch helper: ') && ctx.endsWith(`${WT_WARNING}\n`),
+    ctx.startsWith('# RULES') && ctx.includes('orch CLI: ') && ctx.endsWith(`${WT_WARNING}\n`),
   );
 });
 

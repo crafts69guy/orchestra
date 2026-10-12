@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { create, ensureIgnored, exec, main, merge, realDeps, run } from '../scripts/orch-wt.mjs';
+import { create, ensureIgnored, exec, list, merge, realDeps, run } from '../scripts/orch-wt.mjs';
 
 const tmp = mkdtempSync(join(tmpdir(), 'orch-wt-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
@@ -250,25 +250,30 @@ test('run dispatches subcommands and rejects bad usage', () => {
   ]) {
     const { code, result } = run(argv, deps, '/r');
     assert.equal(code, 1);
-    assert.match(result.stderr, /usage: orch-wt/);
+    assert.match(result.stderr, /usage: orch wt/);
   }
 });
 
-test('main prints the result as one JSON line and sets the exit code', () => {
-  const deps = fake({ 'git check-ignore': ok(), 'wt ': ok('{"path":"/p"}') });
-  let out = '';
-  const proc = {
-    argv: ['node', 'orch-wt', 'new', 'F', 'T1'],
-    cwd: () => '/r',
-    stdout: {
-      write: (s) => {
-        out += s;
-      },
-    },
-  };
-  main(proc, deps);
-  assert.equal(proc.exitCode, 0);
-  assert.deepEqual(JSON.parse(out), [{ task: 'T1', branch: 'F--T1', path: '/p' }]);
+test('list returns the feature task worktrees only', () => {
+  const items = [
+    { branch: 'F', worktree: { path: '/r' } },
+    { branch: 'F--T1', worktree: { path: '/r/.worktrees/F--T1' } },
+    { branch: 'F--T2' },
+    { branch: 'FF--T3', worktree: { path: '/x' } },
+    { branch: 'F--', worktree: { path: '/y' } },
+    { branch: null, worktree: { path: '/detached' } },
+  ];
+  const deps = fake({ 'wt list': ok(JSON.stringify({ items })) });
+  assert.deepEqual(list(deps, '/r', 'F'), {
+    code: 0,
+    result: [{ task: 'T1', branch: 'F--T1', path: '/r/.worktrees/F--T1' }],
+  });
+  assert.deepEqual(run(['list', 'F'], deps, '/r').result.length, 1);
+  assert.deepEqual(list(fake({ 'wt list': bad('no wt') }), '/r', 'F'), {
+    code: 1,
+    result: { status: 'error', task: null, stderr: 'no wt' },
+  });
+  for (const argv of [['list'], ['list', 'F', 'T1']]) assert.equal(run(argv, deps, '/r').code, 1);
 });
 
 test('realDeps wraps fs: mkdir is recursive, append writes', () => {
@@ -308,9 +313,9 @@ test('integration: new then merge against real git + wt', {
   git(repo, 'commit', '-qm', 'init');
   git(repo, 'switch', '-qc', 'feat');
 
-  const bin = fileURLToPath(new URL('../bin/orch-wt', import.meta.url));
+  const bin = fileURLToPath(new URL('../bin/orch', import.meta.url));
   const orch = (...args) =>
-    spawnSync(process.execPath, [bin, ...args], { cwd: repo, env, encoding: 'utf8' });
+    spawnSync(process.execPath, [bin, 'wt', ...args], { cwd: repo, env, encoding: 'utf8' });
 
   const made = orch('new', 'feat', 'T1', 'T2');
   assert.equal(made.status, 0, made.stderr);
@@ -340,4 +345,9 @@ test('integration: new then merge against real git + wt', {
   assert.deepEqual(JSON.parse(c.stdout), { status: 'conflict', task: 'T4', files: ['a.txt'] });
   assert.equal(git(repo, 'rev-parse', 'feat'), before);
   assert.equal(existsSync(t4.path), true);
+
+  // merged worktrees are removed; only the conflicted T4 is left
+  assert.deepEqual(JSON.parse(orch('list', 'feat').stdout), [
+    { task: 'T4', branch: 'feat--T4', path: t4.path },
+  ]);
 });

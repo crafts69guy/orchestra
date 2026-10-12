@@ -8,8 +8,9 @@ description: "orch workflow: run independent tasks from .scratch/<feature>/plan.
 Run the plan in waves. Harness-specific spawn syntax:
 [Claude Code](references/claude.md) · [Codex](references/codex.md).
 
-`orch-wt` is the helper shipped with this plugin; the session context names its
-absolute path. It wraps worktrunk (`wt`) and prints JSON.
+`orch` is the CLI shipped with this plugin; the session context names its
+absolute path. Use that path where the plugin's `bin/` is not on `PATH` (Codex).
+`orch wt` wraps worktrunk (`wt`) and prints JSON.
 
 ## Preconditions
 
@@ -22,7 +23,7 @@ absolute path. It wraps worktrunk (`wt`) and prints JSON.
 
 1. **Pick** the ready tasks: all `depends_on` merged, `files` disjoint. At most
    4 per wave; queue the rest.
-2. **Create** worktrees: `orch-wt new <F> <T1> <T2> …` → JSON list of
+2. **Create** worktrees: `orch wt new <F> <T1> <T2> …` → JSON list of
    `{task, branch, path}`.
 3. **Spawn** one implementer per task, all in the **same message** so they run
    in parallel. Brief each with: plan path + task id, its worktree `path`
@@ -32,7 +33,7 @@ absolute path. It wraps worktrunk (`wt`) and prints JSON.
 5. **Review** each diff (`git -C <path> diff`). Send defects back to the same
    agent.
 6. **Merge one task at a time:**
-   `orch-wt merge <F> <T> --message "<conventional commit message>"`.
+   `orch wt merge <F> <T> --message "<conventional commit message>"`.
    The message is the full commit message: include any trailers your
    instructions require (e.g. `Co-Authored-By`). Never rewrite merged commits
    afterwards.

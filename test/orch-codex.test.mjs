@@ -1,18 +1,10 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import {
-  agentArgs,
-  buildArgs,
-  gitCommonDir,
-  main,
-  run,
-  spawnCodex,
-} from '../scripts/orch-codex.mjs';
+import { agentArgs, buildArgs, gitCommonDir, run, spawnExit } from '../scripts/orch-codex.mjs';
 
 const tmp = mkdtempSync(join(tmpdir(), 'orch-codex-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
@@ -106,7 +98,7 @@ test('run prepends context, agents and --add-dir, adds ORCH=1 and propagates the
   assert.equal(args[0], '-c');
   const instructions = JSON.parse(args[1].slice('developer_instructions='.length));
   assert.ok(instructions.startsWith('# RULES'));
-  assert.ok(instructions.includes(`orch helper: ${join(deps.root, 'bin', 'orch-wt')}`));
+  assert.ok(instructions.includes(`orch CLI: ${join(deps.root, 'bin', 'orch')}`));
   assert.ok(!instructions.includes('worktrunk'));
   assert.deepEqual(args.slice(-4), ['--add-dir', '/repo/.git', 'exec', 'hello']);
   assert.equal(args.filter((a) => a.startsWith('agents.')).length, 5);
@@ -133,8 +125,18 @@ test('run exits 1 without spawning when the rules file is missing', () => {
 });
 
 test('run exits 127 with a clear message when codex is missing', () => {
-  const { deps } = harness({ spawn: () => ({ error: { code: 'ENOENT', message: 'nope' } }) });
+  const { deps, out } = harness({
+    spawn: () => ({ error: { code: 'ENOENT', message: 'nope' } }),
+  });
   assert.equal(run(deps), 127);
+  assert.match(out.stderr, /`codex` not found on PATH; install Codex CLI first/);
+});
+
+test('spawnExit passes the status through', () => {
+  assert.equal(
+    spawnExit({ status: 4 }, 'x', () => {}, 'h'),
+    4,
+  );
 });
 
 test('run exits 1 on other spawn errors', () => {
@@ -152,57 +154,4 @@ test('gitCommonDir returns the absolute common dir in a repo and null outside', 
   const dir = gitCommonDir(repo);
   assert.ok(dir?.endsWith('/.git'));
   assert.equal(gitCommonDir(join(tmp, 'nogit-does-not-exist')), null);
-});
-
-test('spawnCodex reports ENOENT when codex is not on PATH', () => {
-  assert.equal(spawnCodex([], { PATH: join(tmp, 'empty') }).error?.code, 'ENOENT');
-});
-
-test('main runs a fake codex on PATH end to end and sets exitCode', () => {
-  const root = fixtureRoot('main');
-  const bin = join(tmp, 'fakebin');
-  const log = join(tmp, 'fake.log');
-  mkdirSync(bin);
-  writeFileSync(join(bin, 'codex'), `#!/bin/sh\nprintf '%s\\n' "$ORCH" "$@" > "${log}"\nexit 3\n`);
-  chmodSync(join(bin, 'codex'), 0o755);
-  const proc = {
-    argv: ['node', 'orch-codex', 'exec', 'hi'],
-    env: { PATH: `${bin}:${process.env.PATH}` },
-    cwd: () => tmp,
-    stderr: { write: () => {} },
-  };
-  main(proc, pathToFileURL(join(root, 'scripts', 'orch-codex.mjs')).href);
-  assert.equal(proc.exitCode, 3);
-  const logged = readFileSync(log, 'utf8').split('\n');
-  assert.equal(logged[0], '1');
-  assert.deepEqual(logged.slice(-3, -1), ['exec', 'hi']);
-});
-
-test('main reports a missing codex on stderr with exit 127', () => {
-  const root = fixtureRoot('main-missing');
-  let err = '';
-  const proc = {
-    argv: ['node', 'orch-codex'],
-    env: { PATH: join(tmp, 'empty') },
-    cwd: () => tmp,
-    stderr: {
-      write: (s) => {
-        err += s;
-      },
-    },
-  };
-  main(proc, pathToFileURL(join(root, 'scripts', 'orch-codex.mjs')).href);
-  assert.equal(proc.exitCode, 127);
-  assert.match(err, /`codex` not found/);
-});
-
-test('bin/orch-codex shim runs main (codex absent from PATH gives 127)', () => {
-  const shim = fileURLToPath(new URL('../bin/orch-codex', import.meta.url));
-  const r = spawnSync(process.execPath, [shim], {
-    cwd: tmp,
-    env: { PATH: join(tmp, 'empty') },
-    encoding: 'utf8',
-  });
-  assert.equal(r.status, 127);
-  assert.match(r.stderr, /`codex` not found/);
 });

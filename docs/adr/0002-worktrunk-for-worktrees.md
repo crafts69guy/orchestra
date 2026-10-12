@@ -26,4 +26,5 @@ hooks and `.worktreeinclude`.
 - Worktrees live in `<repo>/.worktrees/` (ignored via `.git/info/exclude`);
   the path is passed with `--config-set` because worktrunk ignores it in
   project config.
-- A tested helper, `bin/orch-wt`, owns the exact flags (P0 W1–W5).
+- A tested helper owns the exact flags (P0 W1–W5): `bin/orch-wt` until v0.2.0,
+  `orch wt` since v0.3.0 ([ADR-0005](0005-orch-cli.md)).

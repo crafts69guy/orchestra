@@ -7,7 +7,7 @@ claude_bin=$(command -v claude)
 node_dir=$(dirname "$(node -p process.execPath)")
 git_bin=$(command -v git)
 
-# Two sandbox workarounds for the runs' Bash (and the orch-wt/wt processes it starts):
+# Two sandbox workarounds for the runs' Bash (and the orch wt / wt processes it starts):
 # - On macOS a bare `git` resolves to the /usr/bin/git xcrun shim, which cannot write its cache
 #   in the sandbox and prints every output twice; wt then rejects `git --version`. A wrapper
 #   that execs the git found here comes first on PATH. It lives in the plugin root because

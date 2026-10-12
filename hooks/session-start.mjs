@@ -30,9 +30,10 @@ export function which(name, pathEnv = '') {
   });
 }
 
-export function buildContext(rules, hasWt, helperPath) {
-  const withHelper = `${rules.trimEnd()}\n\norch helper: ${helperPath}\n`;
-  return hasWt ? withHelper : `${withHelper}\n${WT_WARNING}\n`;
+/** `orchPath` is the absolute `bin/orch`; plugin bin/ is not on PATH under Codex, so name it. */
+export function buildContext(rules, hasWt, orchPath) {
+  const withCli = `${rules.trimEnd()}\n\norch CLI: ${orchPath} (use \`${orchPath} wt new|merge|list\`)\n`;
+  return hasWt ? withCli : `${withCli}\n${WT_WARNING}\n`;
 }
 
 export function formatOutput(additionalContext) {
@@ -49,9 +50,7 @@ export function run({ env, root, read, hasCommand, stdout, stderr }) {
     stderr(`orch: rules/orchestrator.md not found under ${root}; skipping injection\n`);
     return 0;
   }
-  stdout(
-    formatOutput(buildContext(rules, hasCommand('wt', env.PATH), join(root, 'bin', 'orch-wt'))),
-  );
+  stdout(formatOutput(buildContext(rules, hasCommand('wt', env.PATH), join(root, 'bin', 'orch'))));
   return 0;
 }
 

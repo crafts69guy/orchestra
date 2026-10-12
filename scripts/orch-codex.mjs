@@ -1,12 +1,20 @@
 import { spawnSync } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { buildContext, pluginRoot, readRules, which } from '../hooks/session-start.mjs';
+import { buildContext, readRules } from '../hooks/session-start.mjs';
 
 const DESCRIPTION = /^description = ("(?:[^"\\]|\\.)*")$/m;
 
-/** Real spawn: inherits stdio, never throws; the caller inspects `error`, `status` and `signal`. */
-export const spawnCodex = (args, env) => spawnSync('codex', args, { stdio: 'inherit', env });
+/** Exit code for a spawnSync result: missing binary 127, other spawn error or a signal 1. */
+export function spawnExit(r, name, stderr, hint) {
+  if (!r.error) return r.status ?? 1;
+  const missing = r.error.code === 'ENOENT';
+  stderr(
+    missing
+      ? `orch: \`${name}\` not found on PATH; ${hint}\n`
+      : `orch: failed to run ${name}: ${r.error.message}\n`,
+  );
+  return missing ? 127 : 1;
+}
 
 /** Absolute git common dir of `cwd` (shared by worktrees), or null outside a repo. */
 export function gitCommonDir(cwd) {
@@ -52,39 +60,15 @@ export function buildArgs({ context, agents, commonDir }) {
 export function run({ argv, env, root, cwd, read, readdir, hasCommand, gitDir, spawn, stderr }) {
   const rules = readRules(root, read);
   if (rules === null) {
-    stderr(`orch-codex: rules/orchestrator.md not found under ${root}\n`);
+    stderr(`orch codex: rules/orchestrator.md not found under ${root}\n`);
     return 1;
   }
-  const context = buildContext(rules, hasCommand('wt', env.PATH), join(root, 'bin', 'orch-wt'));
+  const context = buildContext(rules, hasCommand('wt', env.PATH), join(root, 'bin', 'orch'));
   const prefix = buildArgs({
     context,
     agents: agentArgs(root, { read, readdir }),
     commonDir: gitDir(cwd),
   });
   const r = spawn([...prefix, ...argv], { ...env, ORCH: '1' });
-  if (r.error) {
-    const missing = r.error.code === 'ENOENT';
-    stderr(
-      missing
-        ? 'orch-codex: `codex` not found on PATH; install Codex CLI first.\n'
-        : `orch-codex: failed to run codex: ${r.error.message}\n`,
-    );
-    return missing ? 127 : 1;
-  }
-  return r.status ?? 1;
-}
-
-export function main(proc = process, metaUrl = import.meta.url) {
-  proc.exitCode = run({
-    argv: proc.argv.slice(2),
-    env: proc.env,
-    root: pluginRoot(metaUrl),
-    cwd: proc.cwd(),
-    read: readFileSync,
-    readdir: readdirSync,
-    hasCommand: which,
-    gitDir: gitCommonDir,
-    spawn: spawnCodex,
-    stderr: (s) => proc.stderr.write(s),
-  });
+  return spawnExit(r, 'codex', stderr, 'install Codex CLI first.');
 }

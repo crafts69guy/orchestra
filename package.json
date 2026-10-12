@@ -1,10 +1,41 @@
 {
-  "name": "orchestra",
-  "version": "0.2.0",
-  "private": true,
+  "name": "@crafts69guy/orchestra",
+  "version": "0.3.0",
   "type": "module",
   "description": "Cross-harness (Claude Code + Codex) orchestration workflow plugin",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crafts69guy/orchestra.git"
+  },
+  "homepage": "https://github.com/crafts69guy/orchestra",
+  "keywords": [
+    "claude-code",
+    "codex",
+    "orchestration",
+    "subagents",
+    "worktrees",
+    "cli"
+  ],
+  "bin": {
+    "orch": "bin/orch"
+  },
+  "files": [
+    "bin",
+    "scripts",
+    "hooks",
+    "rules",
+    "agents",
+    "skills",
+    "codex",
+    ".claude-plugin",
+    ".codex-plugin",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=22.8"
   },

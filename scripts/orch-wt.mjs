@@ -6,7 +6,7 @@ import { parseArgs } from 'node:util';
 export const WORKTREE_DIR = '.worktrees';
 const PATH_TEMPLATE = `worktree-path="${WORKTREE_DIR}/{{ branch | sanitize }}"`;
 const USAGE =
-  'usage: orch-wt new <feature> <task>... [--yes] | orch-wt merge <feature> <task> --message <msg> [--yes]';
+  'usage: orch wt new <feature> <task>... [--yes] | orch wt merge <feature> <task> --message <msg> [--yes] | orch wt list <feature>';
 
 /** Real exec: never throws; a spawn failure (e.g. ENOENT) becomes status 127. */
 export function exec(cmd, args, cwd) {
@@ -54,16 +54,34 @@ export function create(deps, cwd, feature, tasks, yes) {
   return { code: 0, result: created };
 }
 
-function findWorktree(deps, cwd, branch) {
+/** `wt list` items that have a worktree, as `{ branch, path }`, or `{ error }`. */
+function worktrees(deps, cwd) {
   const r = deps.exec('wt', ['list', '--format=json'], cwd);
   if (r.status !== 0) return { error: r.stderr };
   try {
-    const item = JSON.parse(r.stdout).items.find((i) => i.branch === branch);
-    if (item?.worktree?.path) return { path: item.worktree.path };
+    const items = JSON.parse(r.stdout).items.filter((i) => i.worktree?.path);
+    return { items: items.map((i) => ({ branch: i.branch, path: i.worktree.path })) };
   } catch {
     return { error: `unparseable wt list output: ${r.stdout}` };
   }
-  return { error: `no worktree for branch ${branch}` };
+}
+
+function findWorktree(deps, cwd, branch) {
+  const found = worktrees(deps, cwd);
+  if (found.error) return found;
+  const item = found.items.find((i) => i.branch === branch);
+  return item ? { path: item.path } : { error: `no worktree for branch ${branch}` };
+}
+
+/** Task worktrees of `feature`: branches named `<feature>--<task>`. */
+export function list(deps, cwd, feature) {
+  const found = worktrees(deps, cwd);
+  if (found.error) return fail(null, found.error);
+  const prefix = taskBranch(feature, '');
+  const result = found.items
+    .filter((i) => i.branch?.startsWith(prefix) && i.branch.length > prefix.length)
+    .map(({ branch, path }) => ({ task: branch.slice(prefix.length), branch, path }));
+  return { code: 0, result };
 }
 
 /** Commit pending work as ONE commit with our message; wt's own fallback message is not conventional. */
@@ -138,6 +156,7 @@ export function run(argv, deps, cwd) {
   if (cmd === 'merge' && feature && tasks.length === 1 && message) {
     return merge(deps, cwd, feature, tasks[0], message, yes);
   }
+  if (cmd === 'list' && feature && tasks.length === 0) return list(deps, cwd, feature);
   return fail(null, USAGE);
 }
 
@@ -147,9 +166,3 @@ export const realDeps = {
   mkdir: (p) => mkdirSync(p, { recursive: true }),
   append: appendFileSync,
 };
-
-export function main(proc = process, deps = realDeps) {
-  const { code, result } = run(proc.argv.slice(2), deps, proc.cwd());
-  proc.stdout.write(`${JSON.stringify(result)}\n`);
-  proc.exitCode = code;
-}
