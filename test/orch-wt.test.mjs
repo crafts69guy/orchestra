@@ -35,6 +35,8 @@ function fake(routes) {
     },
     exists: () => false,
     mkdir: (p) => deps.dirs.push(p),
+    rmdir: (p) => deps.removed.push(p),
+    removed: [],
     append: (p, text) => deps.appended.push([p, text]),
     dirs: [],
     appended: [],
@@ -143,7 +145,12 @@ test('merge on a clean single-commit branch skips committing and reports the F t
   assert.equal(code, 0);
   assert.deepEqual(result, { status: 'merged', task: 'T1', commit: 'abc123' });
   assert.ok(!lines(deps).some((l) => l.startsWith('git commit') || l.startsWith('git reset')));
-  assert.ok(lines(deps).includes('wt -C /r/.worktrees/F--T1 merge F --no-commit --yes'));
+  assert.ok(
+    lines(deps).includes('wt -C /r/.worktrees/F--T1 merge F --no-commit --no-remove --yes'),
+  );
+  const rm = deps.calls.at(-1);
+  assert.deepEqual(rm, { line: 'wt remove F--T1 --foreground -D --yes', cwd: '/r' });
+  assert.deepEqual(deps.removed, [], 'nothing left on disk, nothing to rmdir');
   assert.equal(
     deps.calls.find((c) => c.line.startsWith('git merge-tree')).cwd,
     '/r/.worktrees/F--T1',
@@ -153,7 +160,8 @@ test('merge on a clean single-commit branch skips committing and reports the F t
 test('merge omits --yes unless asked', () => {
   const deps = fake(mergeRoutes());
   merge(deps, '/r', 'F', 'T1', 'm', false);
-  assert.ok(lines(deps).includes('wt -C /r/.worktrees/F--T1 merge F --no-commit'));
+  assert.ok(lines(deps).includes('wt -C /r/.worktrees/F--T1 merge F --no-commit --no-remove'));
+  assert.ok(lines(deps).includes('wt remove F--T1 --foreground -D'));
 });
 
 test('merge commits a dirty tree, soft-resetting onto the merge-base first', () => {
@@ -189,6 +197,40 @@ test('merge errors: missing/failed/garbled worktree lookup, merge-base, commit, 
     assert.equal(result.status, 'error');
     assert.match(result.stderr, re);
   }
+});
+
+test('merge deletes an empty leftover worktree directory after wt remove', () => {
+  const deps = fake(mergeRoutes());
+  deps.exists = (p) => p === '/r/.worktrees/F--T1';
+  assert.equal(merge(deps, '/r', 'F', 'T1', 'm', false).result.status, 'merged');
+  assert.deepEqual(deps.removed, ['/r/.worktrees/F--T1']);
+});
+
+test('merge reports a failed removal or a non-empty leftover as an error naming the commit', () => {
+  const failed = merge(
+    fake(mergeRoutes({ 'wt remove': bad('locked') })),
+    '/r',
+    'F',
+    'T1',
+    'm',
+    false,
+  );
+  assert.deepEqual(failed, {
+    code: 1,
+    result: {
+      status: 'error',
+      task: 'T1',
+      stderr: 'merged as abc123, but /r/.worktrees/F--T1 is left: locked',
+    },
+  });
+  const deps = fake(mergeRoutes());
+  deps.exists = () => true;
+  deps.rmdir = () => {
+    throw new Error('ENOTEMPTY');
+  };
+  const { code, result } = merge(deps, '/r', 'F', 'T1', 'm', false);
+  assert.equal(code, 1);
+  assert.match(result.stderr, /^merged as abc123, but \/r\/.worktrees\/F--T1 is left: ENOTEMPTY$/);
 });
 
 test('merge reports a pre-detected conflict without invoking wt merge', () => {
@@ -276,12 +318,16 @@ test('list returns the feature task worktrees only', () => {
   for (const argv of [['list'], ['list', 'F', 'T1']]) assert.equal(run(argv, deps, '/r').code, 1);
 });
 
-test('realDeps wraps fs: mkdir is recursive, append writes', () => {
+test('realDeps wraps fs: mkdir is recursive, append writes, rmdir only takes empty dirs', () => {
   const dir = join(tmp, 'a', 'b');
   realDeps.mkdir(dir);
   realDeps.append(join(dir, 'f'), 'x\n');
   assert.equal(readFileSync(join(dir, 'f'), 'utf8'), 'x\n');
   assert.equal(realDeps.exists(dir), true);
+  assert.throws(() => realDeps.rmdir(dir), { code: 'ENOTEMPTY' });
+  rmSync(join(dir, 'f'));
+  realDeps.rmdir(dir);
+  assert.equal(realDeps.exists(dir), false);
 });
 
 const hasWt = spawnSync('wt', ['--version']).status === 0;
@@ -331,9 +377,13 @@ test('integration: new then merge against real git + wt', {
   assert.equal(merged.status, 'merged');
   assert.equal(merged.commit, git(repo, 'rev-parse', 'feat'));
   assert.equal(git(repo, 'log', '-1', '--format=%s'), 'feat(t1): add b');
+  // removal is synchronous: no (empty) directory and no branch left once `merged` is printed
+  assert.equal(existsSync(t1.path), false, 'merged worktree directory must be gone');
+  assert.equal(git(repo, 'branch', '--list', 'feat--T1'), '');
 
   // T2 edits a.txt, which nothing else touched: merges cleanly; now force a conflict on a new task.
   assert.equal(orch('merge', 'feat', 'T2', '--message', 'feat(t2): edit a').status, 0);
+  assert.equal(existsSync(t2.path), false);
   const [t3] = JSON.parse(orch('new', 'feat', 'T3').stdout);
   const [t4] = JSON.parse(orch('new', 'feat', 'T4').stdout);
   writeFileSync(join(t3.path, 'a.txt'), 'three\n');

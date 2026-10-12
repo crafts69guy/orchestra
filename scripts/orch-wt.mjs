@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, rmdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
@@ -122,9 +122,12 @@ export function merge(deps, cwd, feature, task, message, yes) {
   }
   if (tree.status !== 0) return fail(task, tree.stderr);
 
+  const yesArg = yes ? ['--yes'] : [];
+  // --no-remove: wt's own cleanup runs in the background and returns before the directory is
+  // gone (or never finishes when the caller's sandbox kills it), so remove in the foreground below.
   const r = deps.exec(
     'wt',
-    ['-C', path, 'merge', feature, '--no-commit', ...(yes ? ['--yes'] : [])],
+    ['-C', path, 'merge', feature, '--no-commit', '--no-remove', ...yesArg],
     cwd,
   );
   if (r.status !== 0) {
@@ -135,6 +138,17 @@ export function merge(deps, cwd, feature, task, message, yes) {
     return { code: 2, result: { status: 'conflict', task, files } };
   }
   const commit = git(deps, cwd, 'rev-parse', feature).stdout.trim();
+  const left = `merged as ${commit}, but ${path} is left`;
+  // -D: wt judges "merged" against the default branch, but the branch is now in `feature`.
+  const rm = deps.exec('wt', ['remove', branch, '--foreground', '-D', ...yesArg], cwd);
+  if (rm.status !== 0) return fail(task, `${left}: ${rm.stderr}`);
+  if (deps.exists(path)) {
+    try {
+      deps.rmdir(path); // only an empty leftover: rmdir refuses a non-empty directory
+    } catch (e) {
+      return fail(task, `${left}: ${e.message}`);
+    }
+  }
   return { code: 0, result: { status: 'merged', task, commit } };
 }
 
@@ -164,5 +178,6 @@ export const realDeps = {
   exec,
   exists: existsSync,
   mkdir: (p) => mkdirSync(p, { recursive: true }),
+  rmdir: rmdirSync,
   append: appendFileSync,
 };
