@@ -1,0 +1,23 @@
+{
+  "name": "orchestra",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cross-harness (Claude Code + Codex) orchestration workflow plugin",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.8"
+  },
+  "scripts": {
+    "test": "node --test --experimental-test-coverage --test-coverage-lines=98 --test-coverage-branches=98 --test-coverage-functions=98 --test-coverage-exclude='test/**'",
+    "lint": "biome check . && markdownlint-cli2 \"**/*.md\" \"#node_modules\"",
+    "fmt": "biome format --write .",
+    "gen:codex": "node scripts/gen-codex-agents.mjs",
+    "check": "npm run lint && npm run gen:codex -- --check && npm test",
+    "validate": "claude plugin validate ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "markdownlint-cli2": "0.23.3"
+  }
+}

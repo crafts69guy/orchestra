@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "orchestra",
+  "description": "Cross-harness orchestration workflow for Claude Code and Codex.",
+  "owner": {
+    "name": "crafts69guy",
+    "url": "https://github.com/crafts69guy"
+  },
+  "plugins": [
+    {
+      "name": "orch",
+      "description": "Orchestrator workflow: scope, implement, review, ship via specialised subagents and worktrees.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ],
+  "allowCrossMarketplaceDependenciesOn": ["ponytail"]
+}

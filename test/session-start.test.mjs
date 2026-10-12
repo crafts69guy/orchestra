@@ -1,0 +1,189 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { delimiter, join } from 'node:path';
+import { after, test } from 'node:test';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import {
+  buildContext,
+  formatOutput,
+  isEntry,
+  main,
+  pluginRoot,
+  readRules,
+  run,
+  WT_WARNING,
+  which,
+} from '../hooks/session-start.mjs';
+
+const tmp = mkdtempSync(join(tmpdir(), 'orch-'));
+after(() => rmSync(tmp, { recursive: true, force: true }));
+
+function fixtureRoot(name, rules) {
+  const root = join(tmp, name);
+  mkdirSync(join(root, 'rules'), { recursive: true });
+  if (rules !== undefined) writeFileSync(join(root, 'rules', 'orchestrator.md'), rules);
+  return root;
+}
+
+function harness(overrides = {}) {
+  const out = { stdout: '', stderr: '' };
+  const deps = {
+    env: { ORCH: '1', PATH: '/bin' },
+    root: fixtureRoot('default', '# RULES\n'),
+    read: undefined,
+    hasCommand: () => true,
+    stdout: (s) => {
+      out.stdout += s;
+    },
+    stderr: (s) => {
+      out.stderr += s;
+    },
+    ...overrides,
+  };
+  return { deps, out };
+}
+
+test('pluginRoot resolves one level above hooks/', () => {
+  const url = pathToFileURL(join(tmp, 'hooks', 'session-start.mjs')).href;
+  assert.equal(pluginRoot(url), tmp);
+});
+
+test('readRules returns file contents, or null when missing/unreadable', () => {
+  assert.equal(readRules(fixtureRoot('has', '# HAS\n')), '# HAS\n');
+  assert.equal(readRules(fixtureRoot('none')), null);
+  assert.equal(
+    readRules(tmp, () => {
+      throw new Error('boom');
+    }),
+    null,
+  );
+});
+
+test('which finds executables on PATH only', () => {
+  const bin = join(tmp, 'bin');
+  mkdirSync(bin);
+  writeFileSync(join(bin, 'tool'), '#!/bin/sh\n');
+  chmodSync(join(bin, 'tool'), 0o755);
+  writeFileSync(join(bin, 'plain'), 'x');
+  chmodSync(join(bin, 'plain'), 0o644);
+  const pathEnv = ['/nonexistent', bin].join(delimiter);
+  assert.equal(which('tool', pathEnv), true);
+  assert.equal(which('plain', pathEnv), false);
+  assert.equal(which('tool', undefined), false);
+});
+
+test('buildContext appends the worktrunk warning only when wt is missing', () => {
+  assert.equal(
+    buildContext('# R\n', true, '/p/bin/orch-wt'),
+    '# R\n\norch helper: /p/bin/orch-wt\n',
+  );
+  assert.equal(
+    buildContext('# R\n\n', false, '/p/bin/orch-wt'),
+    `# R\n\norch helper: /p/bin/orch-wt\n\n${WT_WARNING}\n`,
+  );
+  assert.match(WT_WARNING, /brew install worktrunk/);
+});
+
+test('formatOutput emits the SessionStart hookSpecificOutput shape', () => {
+  assert.deepEqual(JSON.parse(formatOutput('ctx')), {
+    hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: 'ctx' },
+  });
+});
+
+test('run is silent and exits 0 unless ORCH=1', () => {
+  for (const env of [{}, { ORCH: '0' }, { ORCH: 'true' }]) {
+    const { deps, out } = harness({ env });
+    assert.equal(run(deps), 0);
+    assert.deepEqual(out, { stdout: '', stderr: '' });
+  }
+});
+
+test('run injects the rules when ORCH=1 and wt is present', () => {
+  const { deps, out } = harness({
+    hasCommand: (name, pathEnv) => name === 'wt' && pathEnv === '/bin',
+  });
+  assert.equal(run(deps), 0);
+  const ctx = JSON.parse(out.stdout).hookSpecificOutput.additionalContext;
+  assert.equal(ctx, `# RULES\n\norch helper: ${join(deps.root, 'bin', 'orch-wt')}\n`);
+  assert.equal(out.stderr, '');
+});
+
+test('run warns about worktrunk when wt is missing', () => {
+  const { deps, out } = harness({ hasCommand: () => false });
+  assert.equal(run(deps), 0);
+  const ctx = JSON.parse(out.stdout).hookSpecificOutput.additionalContext;
+  assert.ok(
+    ctx.startsWith('# RULES') && ctx.includes('orch helper: ') && ctx.endsWith(`${WT_WARNING}\n`),
+  );
+});
+
+test('run exits 0 with a stderr note when the rules file is missing', () => {
+  const { deps, out } = harness({ root: fixtureRoot('missing') });
+  assert.equal(run(deps), 0);
+  assert.equal(out.stdout, '');
+  assert.match(out.stderr, /rules\/orchestrator\.md not found/);
+});
+
+function fakeProcess(env) {
+  const proc = { env, out: '', err: '' };
+  proc.stdout = {
+    write(s) {
+      proc.out += s;
+      return true;
+    },
+  };
+  proc.stderr = {
+    write(s) {
+      proc.err += s;
+      return true;
+    },
+  };
+  return proc;
+}
+
+test('main wires real fs and process streams against a plugin root', () => {
+  const root = fixtureRoot('main-ok', '# MAIN\n');
+  const ok = fakeProcess({ ORCH: '1', PATH: '' });
+  main(ok, pathToFileURL(join(root, 'hooks', 'session-start.mjs')).href);
+  assert.equal(ok.exitCode, 0);
+  assert.match(ok.out, /# MAIN/);
+  assert.match(ok.out, /worktrunk/);
+
+  const bad = fakeProcess({ ORCH: '1', PATH: '' });
+  main(bad, pathToFileURL(join(tmp, 'nowhere', 'hooks', 'session-start.mjs')).href);
+  assert.equal(bad.exitCode, 0);
+  assert.equal(bad.out, '');
+  assert.match(bad.err, /not found/);
+});
+
+test('script entrypoint exits 0 and prints nothing without ORCH', () => {
+  const script = fileURLToPath(new URL('../hooks/session-start.mjs', import.meta.url));
+  const { ORCH: _drop, ...env } = process.env;
+  const res = spawnSync(process.execPath, [script], { env, encoding: 'utf8' });
+  assert.equal(res.status, 0);
+  assert.equal(res.stdout, '');
+});
+
+test('isEntry matches through a symlinked plugin dir, false on missing paths', () => {
+  const real = join(tmp, 'entry-real');
+  mkdirSync(real);
+  writeFileSync(join(real, 'h.mjs'), '');
+  const link = join(tmp, 'entry-link');
+  symlinkSync(real, link);
+  const metaUrl = pathToFileURL(join(real, 'h.mjs')).href;
+  assert.equal(isEntry(join(link, 'h.mjs'), metaUrl), true);
+  assert.equal(isEntry(join(tmp, 'other.mjs'), metaUrl), false);
+});
+
+test('hook runs when invoked through a symlinked plugin dir', () => {
+  const link = join(tmp, 'plugin-link');
+  symlinkSync(fileURLToPath(new URL('..', import.meta.url)), link);
+  const r = spawnSync(process.execPath, [join(link, 'hooks', 'session-start.mjs')], {
+    env: { ...process.env, ORCH: '1' },
+    encoding: 'utf8',
+  });
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /hookSpecificOutput/);
+});

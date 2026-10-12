@@ -1,0 +1,29 @@
+{
+  "name": "orch",
+  "version": "0.1.0",
+  "description": "Orchestrator workflow: scope, implement, review, ship via specialised subagents and worktrees.",
+  "author": {
+    "name": "crafts69guy",
+    "url": "https://github.com/crafts69guy"
+  },
+  "homepage": "https://github.com/crafts69guy/orchestra",
+  "repository": "https://github.com/crafts69guy/orchestra",
+  "license": "MIT",
+  "keywords": ["orchestration", "subagents", "worktrees", "workflow"],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Orchestra",
+    "shortDescription": "Orchestrator workflow for subagents and worktrees",
+    "longDescription": "Always-on orchestration rules: scope, implement, review and ship through specialised subagents, with parallel work in git worktrees.",
+    "developerName": "crafts69guy",
+    "category": "Productivity",
+    "capabilities": ["Instructions", "Lifecycle hooks"],
+    "websiteURL": "https://github.com/crafts69guy/orchestra",
+    "defaultPrompt": [
+      "Orchestrate this task: scope, implement, review, ship.",
+      "Split this work into parallel worktree tasks."
+    ],
+    "brandColor": "#111111"
+  }
+}

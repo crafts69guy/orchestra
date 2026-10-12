@@ -1,0 +1,19 @@
+{
+  "name": "orch",
+  "version": "0.1.0",
+  "description": "Orchestrator workflow: scope, implement, review, ship via specialised subagents and worktrees.",
+  "author": {
+    "name": "crafts69guy"
+  },
+  "homepage": "https://github.com/crafts69guy/orchestra",
+  "repository": "https://github.com/crafts69guy/orchestra",
+  "license": "MIT",
+  "keywords": ["orchestration", "subagents", "worktrees", "workflow"],
+  "hooks": "./hooks/hooks.json",
+  "dependencies": [
+    {
+      "name": "ponytail",
+      "marketplace": "ponytail"
+    }
+  ]
+}

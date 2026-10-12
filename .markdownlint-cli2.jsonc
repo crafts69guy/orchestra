@@ -1,0 +1,9 @@
+{
+  "config": {
+    "default": true,
+    "MD013": { "line_length": 100, "code_blocks": false, "tables": false },
+    // Compact tables are fine; Biome/markdownlint disagree on column alignment.
+    "MD060": false
+  },
+  "ignores": ["CLAUDE.md", "node_modules/**", "coverage/**", ".worktrees/**", ".scratch/**"]
+}
