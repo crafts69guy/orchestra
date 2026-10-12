@@ -1,0 +1,120 @@
+schema_version: "1.1"
+name: bench-large
+description: >-
+  Benchmark, not a behaviour check: the break-even probe. Three independent modules from SPEC.md
+  (cron, JSON Schema subset, expression evaluator), each several minutes of
+  edit-and-test work, unlike bench-modules (about 25 s each). Graded on outcomes only (hidden
+  acceptance tests, own tests, commits, clean tree, one LLM quality rubric), so the no-plugin
+  baseline is not penalised for working serially. Compare score, duration and cost between arms
+  with evals/_support/summarize.mjs.
+tags: [bench]
+plugins: ["../../.eval-plugin"]
+runs: 2
+context:
+  scaffold_script: fixture.sh
+# Sizing: bench-modules' serial baseline took about 120 s, 20 turns and $0.56 a run for about 140
+# reference lines. This case has about 390 reference lines, a twice as long spec and 73 hidden
+# edge cases. Measured (2026-10-12, 2 runs/arm): 2.5-4 min, 9-21 turns, $0.9-1.2 a run. max_turns
+# and timeout_seconds keep wide headroom so a slow serial run finishes rather than being cut off
+# (a cut-off run would bias the comparison against the baseline).
+execution:
+  model: opus
+  max_turns: 200 # schema maximum; ~2x the expected 45–90 turns
+  timeout_seconds: 2700
+  allowed_tools: [Read, Glob, Grep, Bash, Edit, Write, Agent, Skill]
+  prompt: |
+    Implement the three modules described in SPEC.md on this branch (feat/x), each with your own
+    tests as SPEC.md describes. Land each module as its own commit on feat/x. Run `sh check.sh`
+    as the very last step.
+# Weights (outcomes total 11), as in bench-modules: the hidden acceptance suite is the main
+# correctness signal (6, two tiers per module so a near miss still counts); the LLM rubric covers what tests
+# cannot (2, lower because one noisy judge); own tests green, one commit per module and a clean
+# tree are hygiene (1 each).
+graders:
+  - name: acceptance-cron-80
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^acceptance cron: \d+/\d+ (?:[89]\d|100)%$'
+  - name: acceptance-cron-all
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^acceptance cron: \d+/\d+ 100%$'
+  - name: acceptance-schema-80
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^acceptance schema: \d+/\d+ (?:[89]\d|100)%$'
+  - name: acceptance-schema-all
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^acceptance schema: \d+/\d+ 100%$'
+  - name: acceptance-expr-80
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^acceptance expr: \d+/\d+ (?:[89]\d|100)%$'
+  - name: acceptance-expr-all
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^acceptance expr: \d+/\d+ 100%$'
+  - name: own-tests-pass
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^# pass ([4-9]|\d{2,})\n# fail 0$'
+  - name: three-commits
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^commit: '
+    match: "count:3"
+  - name: clean-tree
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^dirty: 0$'
+  # Peeking guards (copied from bench-modules): never scored; summarize.mjs drops runs that fail them.
+  - name: no-peek-bash
+    type: tool_used
+    tool: Bash
+    input_match: '"command"\s*:\s*"(?:[^"\\]|\\.)*?(?:acceptance\.tgz|\.git/acceptance)'
+    min: 0
+    max: 0
+    weight: 1
+    arm: both
+  - name: no-peek-read
+    type: tool_used
+    tool: Read
+    input_match: '"file_path"\s*:\s*"[^"]*acceptance'
+    min: 0
+    max: 0
+    weight: 1
+    arm: both
+  - name: no-peek-grep
+    type: tool_used
+    tool: Grep
+    input_match: '"(?:path|glob)"\s*:\s*"[^"]*acceptance'
+    min: 0
+    max: 0
+    weight: 1
+    arm: both
+  - name: quality-rubric
+    type: llm
+    weight: 2
+    focus: { source: file, path: review.out }
+    criteria: |
+      The file is SPEC.md followed by the git diff of an agent's implementation of it. Score
+      each item 0-2:
+      1. Correctness: each module matches SPEC.md, including the error types it names.
+      2. Edge cases: cron day-of-month/day-of-week OR rule, Sunday as 7, leap days and impossible
+         dates; schema JSON Pointer escaping, code-point lengths, $ref recursion; expression
+         precedence, right-associative power, short-circuiting and SyntaxError positions.
+      3. Readability: clear names, short functions, no dead or commented-out code.
+      4. Tests: every module has focused tests covering normal and edge cases.
+      5. No over-engineering: no features, options, dependencies or abstractions SPEC.md does not
+         ask for.
+      PASS only if the total is at least 8 of 10 and no item scores 0; otherwise FAIL.
