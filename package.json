@@ -1,6 +1,6 @@
 {
   "name": "orchestra",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Cross-harness (Claude Code + Codex) orchestration workflow plugin",
@@ -14,7 +14,8 @@
     "fmt": "biome format --write .",
     "gen:codex": "node scripts/gen-codex-agents.mjs",
     "check": "npm run lint && npm run gen:codex -- --check && npm test",
-    "validate": "claude plugin validate ."
+    "validate": "claude plugin validate .",
+    "eval": "sh evals/_support/run.sh"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

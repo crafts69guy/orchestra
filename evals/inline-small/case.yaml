@@ -1,0 +1,37 @@
+schema_version: "1.1"
+name: inline-small
+description: A one-line, fully specified fix. The orchestrator should edit inline, not delegate.
+tags: [orch]
+plugins: ["../../.eval-plugin"]
+runs: 1
+context:
+  scaffold_script: fixture.sh
+execution:
+  model: opus # the production orchestrator model; sonnet inlined cases 2 and 3 in trials
+  max_turns: 12
+  timeout_seconds: 300
+  allowed_tools: [Read, Glob, Grep, Bash, Edit, Write, Agent, Skill]
+  prompt: |
+    Bug: `add` in src/math.mjs subtracts instead of adding. Change `a - b` to `a + b` on that
+    line; nothing else needs to change. Run `sh check.sh` as the very last step.
+graders:
+  - name: no-subagent
+    type: tool_used
+    tool: Agent
+    min: 0
+    max: 0
+  - name: fixed
+    type: regex
+    target: { source: file, path: src/math.mjs }
+    pattern: 'add = \(a, b\) => a \+ b;'
+  - name: tests-pass
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^# pass 2\n# fail 0$'
+  - name: no-commit
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^commit: '
+    match: not_contains

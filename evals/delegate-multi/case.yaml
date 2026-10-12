@@ -1,0 +1,57 @@
+schema_version: "1.1"
+name: delegate-multi
+description: >-
+  A change across two dependent source files plus tests. The orchestrator should hand it to one
+  orch:implementer on the feature branch, without parallel dispatch, and nobody commits.
+tags: [orch]
+plugins: ["../../.eval-plugin"]
+runs: 2
+context:
+  scaffold_script: fixture.sh
+execution:
+  model: opus # the production orchestrator model; sonnet inlined cases 2 and 3 in trials
+  max_turns: 25
+  timeout_seconds: 600
+  allowed_tools: [Read, Glob, Grep, Bash, Edit, Write, Agent, Skill]
+  prompt: |
+    Add multi-currency support to price formatting:
+
+    - In src/currency.mjs, export `symbolFor(code)` returning `$` for USD, `€` for EUR and `£`
+      for GBP, and throwing a `RangeError` for any other code.
+    - Change `formatPrice(cents)` in src/format.mjs to `formatPrice(cents, currency = 'USD')`,
+      using `symbolFor` for the symbol.
+    - Add tests: test/currency.test.mjs for `symbolFor`, and EUR/GBP cases in
+      test/format.test.mjs. Existing tests must keep passing.
+
+    Don't commit. Run `sh check.sh` as the very last step.
+graders:
+  - name: implementer-spawned
+    type: tool_used
+    tool: Agent
+    input_match: '"subagent_type"\s*:\s*"orch:implementer"'
+  - name: no-dispatch
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:orch:)?dispatch"'
+    min: 0
+    max: 0
+    arm: both
+  - name: symbol-for
+    type: regex
+    target: { source: file, path: src/currency.mjs }
+    pattern: 'export (?:function|const) symbolFor\b'
+  - name: format-uses-symbol-for
+    type: regex
+    target: { source: file, path: src/format.mjs }
+    pattern: 'symbolFor\('
+  - name: tests-pass
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^# pass ([3-9]|\d{2,})\n# fail 0$'
+  - name: no-commit
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^commit: '
+    match: not_contains

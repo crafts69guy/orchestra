@@ -12,6 +12,7 @@ Contributor guide for this repo. Node >= 22.8, ESM, zero runtime dependencies.
   fail on drift without writing (CI does this).
 - `npm run check` runs lint, the generator staleness check and tests.
 - `npm run validate` runs `claude plugin validate .`.
+- `npm run eval` runs the behaviour evals (below). Not part of `check` or CI.
 
 ## Conventions
 
@@ -46,3 +47,32 @@ body (`developer_instructions`). `model` is not mapped, so Codex inherits the us
 `readRules` and `buildContext` from `hooks/session-start.mjs`, so the Codex context cannot drift
 from the Claude hook. Per-run `-c` overrides are used instead of editing `~/.codex/config.toml`.
 Note that `codex exec -s workspace-write` itself persists project trust in `~/.codex/config.toml`.
+
+## Behaviour evals
+
+`npm run eval` runs `claude plugin eval` over `evals/*/case.yaml` with `--trust-plugin --scaffold
+--max-cost-usd 5 --no-publish`, granting `Bash Edit Write`. Each case scaffolds a small node:test
+repo on branch `feat/x` and runs with the plugin and again without it (the baseline arm):
+
+| Case | Expects |
+|---|---|
+| `inline-small` | one-line fix done inline: no Agent call, tests pass |
+| `delegate-multi` | two dependent files + tests: `orch:implementer` spawned, no dispatch, no commit |
+| `parallel-dispatch` | two independent features: `plan` + `dispatch`, 2+ implementers, two `orch-wt merge` conventional commits, no leftover worktrees |
+
+It costs real model usage on your Claude account (a full suite, 10 runs with Opus as the
+orchestrator, cost about $1.50) and needs a logged-in `claude`, `wt` and git. Narrow it with
+`npm run eval -- --case <name> --runs 1 --ablation none`. Results go to `evals/results/`
+(gitignored).
+
+`evals/_support/run.sh` first builds `.eval-plugin/` (gitignored), a copy of the plugin, because
+eval runs differ from a real session:
+
+- Only `EVAL_*` variables reach a run, so the copy's hook commands are prefixed with `ORCH=1`.
+  The hooks' own gate is unchanged.
+- The `ponytail` dependency cannot be installed in the run's isolated home, so the copy's
+  manifest drops it.
+- Sandboxed Bash cannot read most of `$HOME` (including this repo) or `/tmp`, only the plugin
+  root. So the copy carries `bin/`, `scripts/` and `package.json`, PATH entries under `$HOME` are
+  dropped (Node's spawn fails with EPERM on them), and a `git` wrapper in the copy avoids the
+  macOS `/usr/bin/git` shim, which prints everything twice in the sandbox and breaks `wt`.

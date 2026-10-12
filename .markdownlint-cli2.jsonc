@@ -5,5 +5,13 @@
     // Compact tables are fine; Biome/markdownlint disagree on column alignment.
     "MD060": false
   },
-  "ignores": ["CLAUDE.md", "node_modules/**", "coverage/**", ".worktrees/**", ".scratch/**"]
+  "ignores": [
+    "CLAUDE.md",
+    "node_modules/**",
+    "coverage/**",
+    ".worktrees/**",
+    ".scratch/**",
+    ".eval-plugin/**",
+    "evals/results/**"
+  ]
 }

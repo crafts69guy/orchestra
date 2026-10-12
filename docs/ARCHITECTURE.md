@@ -331,7 +331,7 @@ critical rules instead of relying on hooks alone.
 | Lint (Markdown) | markdownlint-cli2 | no diagnostics |
 | Plugin manifest | `claude plugin validate .` | passes |
 | Generated adapters | `gen-codex-agents --check` (P3) | no diff |
-| Behaviour | `claude plugin eval` (P4) | delegate / don't-delegate / parallel cases beat baseline |
+| Behaviour | `npm run eval` (`claude plugin eval`, manual, costs money) | delegate / don't-delegate / parallel cases beat baseline |
 
 Hook scripts are small exported pure functions behind a thin `main`, so
 coverage reflects real logic rather than exclusions.
@@ -358,4 +358,5 @@ All open questions were tested against real CLIs on 2026-10-12
 | P1 | Tooling, manifests, agents, rules, SessionStart hook | done |
 | P2 | `plan` + `dispatch` skills, `orch-wt`, guard and gate hooks | done |
 | P3 | Codex adapter: generator, `bin/orch-codex` launcher | done |
-| P4 | Evals, CI hardening, `claude plugin tag`, public release | todo |
+| P4 | Evals, `claude plugin tag`, public release | done (v0.2.0) |
+| P5 | Unified `orch` CLI (`orch claude \| codex \| wt \| doctor \| eval`), npm package; dotfiles drop the `--wf` wrappers ([#1](https://github.com/crafts69guy/orchestra/issues/1)) | todo |

@@ -2,3 +2,5 @@ node_modules/
 coverage/
 .worktrees/
 .scratch/
+.eval-plugin/
+evals/results/
