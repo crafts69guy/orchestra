@@ -212,11 +212,14 @@ flowchart TD
   scope --> split{2+ separable<br/>parts?}
   split -->|no| impl1[One implementer<br/>on the feature branch]
   split -->|yes| plan["plan skill → .scratch/FEATURE/plan.md"]
-  plan --> indep{Independent tasks<br/>with disjoint files?}
+  plan --> indep{2+ independent tasks<br/>with disjoint files?}
   indep -->|no| seq[Implementers one at a time]
-  indep -->|yes| dispatch[dispatch skill:<br/>parallel waves]
+  indep -->|yes| big{Each substantial?<br/>own module, ~100+ lines}
+  big -->|no| batch[One implementer,<br/>small tasks batched in order]
+  big -->|yes| dispatch[dispatch skill:<br/>parallel waves]
   impl1 --> verify
   seq --> verify
+  batch --> verify
   dispatch --> verify
   verify[Orchestrator reviews diff,<br/>reruns validation] --> risky{Risky change<br/>or requested?}
   risky -->|yes| review[reviewer, ≤2 fix rounds] --> ship
@@ -235,6 +238,7 @@ flowchart TD
   goal: Parse the new config key and expose it on Settings
   files: [src/config.ts, src/config.test.ts]   # ownership; must be disjoint within a wave
   depends_on: [T1]
+  size: small                                   # or substantial: own module, ~100+ lines
   validate: pnpm test src/config
   decisions: [use zod schema, key name `retryLimit`]
 ```
@@ -242,6 +246,12 @@ flowchart TD
 The orchestrator computes waves from `depends_on`; tasks in one wave must have
 disjoint `files`. Cross-cutting decisions are written into `decisions` before
 dispatch so parallel workers never make conflicting implicit choices.
+
+Only `substantial` tasks are dispatched, and only when 2+ of them are
+independent; `small` tasks are batched into one implementer on the feature
+branch. Parallel worktrees were no faster on tiny modules at +45% cost, and
+21% faster on large ones at +22% cost
+([benchmarks](research/benchmarks.md), [ADR-0006](adr/0006-dispatch-threshold.md)).
 
 ## 8. Parallel dispatch with worktrunk
 
@@ -369,7 +379,8 @@ critical rules instead of relying on hooks alone.
 | Lint (Markdown) | markdownlint-cli2 | no diagnostics |
 | Plugin manifest | `claude plugin validate .` | passes |
 | Generated adapters | `gen-codex-agents --check` (P3) | no diff |
-| Behaviour | `npm run eval` / `orch eval` (`claude plugin eval`, manual, costs money) | delegate / don't-delegate / parallel cases beat baseline |
+| Behaviour | `npm run eval` / `orch eval` (`claude plugin eval`, manual, costs money) | delegate / don't-delegate / batch / parallel cases beat baseline |
+| Benchmark | `npm run eval:bench` (`bench-modules` and the break-even probe `bench-large`, outcome graders only incl. hidden tests; manual, about $3 and $5 per full run; [results](research/benchmarks.md)) | reported, not gated: score, wall-clock and cost Δ vs baseline |
 
 Hook scripts are small exported pure functions behind a thin `main`, so
 coverage reflects real logic rather than exclusions.
@@ -398,3 +409,4 @@ All open questions were tested against real CLIs on 2026-10-12
 | P3 | Codex adapter: generator, launcher (now `orch codex`) | done |
 | P4 | Evals, `claude plugin tag`, public release | done (v0.2.0) |
 | P5 | Unified `orch` CLI (`orch claude \| codex \| wt \| doctor \| eval`), npm package; dotfiles drop the `--wf` wrappers ([#1](https://github.com/crafts69guy/orchestra/issues/1)) | done (v0.3.0) |
+| P6 | Benchmarks (`bench-modules`, `bench-large`), dispatch threshold by task size ([ADR-0006](adr/0006-dispatch-threshold.md)), `batch-small` / `parallel-dispatch` evals | done (v0.4.0) |

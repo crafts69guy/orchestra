@@ -1,6 +1,6 @@
 ---
 name: dispatch
-description: "orch workflow: run independent tasks from .scratch/<feature>/plan.md in parallel, one implementer per git worktree (worktrunk), then merge them into the feature branch one at a time."
+description: "orch workflow: run independent substantial tasks from .scratch/<feature>/plan.md in parallel, one implementer per git worktree (worktrunk), then merge them into the feature branch one at a time."
 ---
 
 # Dispatch
@@ -21,8 +21,10 @@ absolute path. Use that path where the plugin's `bin/` is not on `PATH` (Codex).
 
 ## Each wave
 
-1. **Pick** the ready tasks: all `depends_on` merged, `files` disjoint. At most
-   4 per wave; queue the rest.
+1. **Pick** the ready `substantial` tasks: all `depends_on` merged, `files`
+   disjoint. At most 4 per wave; queue the rest. `small` tasks are never
+   dispatched: run them as one batched implementer task on `F`, before any wave
+   that depends on them.
 2. **Create** worktrees: `orch wt new <F> <T1> <T2> …` → JSON list of
    `{task, branch, path}`.
 3. **Spawn** one implementer per task, all in the **same message** so they run

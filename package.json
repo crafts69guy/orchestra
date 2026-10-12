@@ -1,6 +1,6 @@
 {
   "name": "@crafts69guy/orchestra",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "Cross-harness (Claude Code + Codex) orchestration workflow plugin",
   "license": "MIT",
@@ -46,7 +46,8 @@
     "gen:codex": "node scripts/gen-codex-agents.mjs",
     "check": "npm run lint && npm run gen:codex -- --check && npm test",
     "validate": "claude plugin validate .",
-    "eval": "sh evals/_support/run.sh"
+    "eval": "sh evals/_support/run.sh",
+    "eval:bench": "sh evals/_support/bench.sh"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

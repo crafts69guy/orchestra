@@ -1,0 +1,72 @@
+schema_version: "1.1"
+name: batch-small
+description: >-
+  Two independent but small features in disjoint files. Parallel dispatch does not pay off at this
+  size, so the orchestrator should hand both to one orch:implementer as a single batched task (no
+  dispatch skill, no worktrees) and land each as a conventional commit.
+tags: [orch]
+plugins: ["../../.eval-plugin"]
+runs: 2
+context:
+  scaffold_script: fixture.sh
+execution:
+  model: opus # the production orchestrator model; sonnet inlined cases 2 and 3 in trials
+  max_turns: 30
+  timeout_seconds: 600
+  allowed_tools: [Read, Glob, Grep, Bash, Edit, Write, Agent, Skill]
+  prompt: |
+    Add two independent features on this branch (feat/x), each with tests:
+
+    1. `slugify(str)` in src/strings.mjs: lowercase, trim, collapse every run of
+       non-alphanumeric characters into one `-`, and strip leading and trailing `-`
+       (`slugify('  Hello, World! ')` is `'hello-world'`). Tests in test/strings.test.mjs.
+    2. `clamp(n, min, max)` in src/math.mjs: returns `n` limited to `[min, max]`, and throws a
+       `RangeError` when `min > max`. Tests in test/math.test.mjs.
+
+    Land each feature as its own commit on feat/x. Run `sh check.sh` as the very last step.
+graders:
+  - name: no-dispatch
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:orch:)?dispatch"'
+    min: 0
+    max: 0
+    arm: both
+  - name: one-implementer
+    type: tool_used
+    tool: Agent
+    input_match: '"subagent_type"\s*:\s*"orch:implementer"'
+    min: 1
+    max: 1
+  - name: two-conventional-commits
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^commit: (?:feat|fix|test|refactor|perf|chore|docs)(?:\([^)]+\))?!?: \S'
+    match: "count:2"
+  - name: no-other-commits
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^commit: '
+    match: "count:2"
+  - name: on-feat-x
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^branch: feat/x$'
+  - name: clean-tree
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^dirty: 0$'
+  - name: no-leftover-worktrees
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^worktrees: 1$'
+  - name: tests-pass
+    type: regex
+    target: { source: file, path: check.out }
+    flags: m
+    pattern: '^# pass ([4-9]|\d{2,})\n# fail 0$'

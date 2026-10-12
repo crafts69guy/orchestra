@@ -1,28 +1,23 @@
 schema_version: "1.1"
 name: parallel-dispatch
 description: >-
-  Two independent features in disjoint files. The orchestrator should plan, dispatch one
+  Two independent, substantial modules in disjoint files (bench-large's cron parser and expression
+  evaluator, each ~100-200 reference lines). The orchestrator should plan, dispatch one
   orch:implementer per task in its own worktree, and merge each as a conventional commit.
 tags: [orch]
 plugins: ["../../.eval-plugin"]
-runs: 2
+runs: 1 # each run is several minutes and ~$1; bench-large covers the timing question
 context:
   scaffold_script: fixture.sh
 execution:
-  model: opus # the production orchestrator model; sonnet inlined cases 2 and 3 in trials
-  max_turns: 50
-  timeout_seconds: 1200
+  model: opus # the production orchestrator model
+  max_turns: 100
+  timeout_seconds: 1500
   allowed_tools: [Read, Glob, Grep, Bash, Edit, Write, Agent, Skill]
   prompt: |
-    Add two independent features on this branch (feat/x), each with tests:
-
-    1. `slugify(str)` in src/strings.mjs: lowercase, trim, collapse every run of
-       non-alphanumeric characters into one `-`, and strip leading and trailing `-`
-       (`slugify('  Hello, World! ')` is `'hello-world'`). Tests in test/strings.test.mjs.
-    2. `clamp(n, min, max)` in src/math.mjs: returns `n` limited to `[min, max]`, and throws a
-       `RangeError` when `min > max`. Tests in test/math.test.mjs.
-
-    Land each feature as its own commit on feat/x. Run `sh check.sh` as the very last step.
+    Implement the two modules described in SPEC.md on this branch (feat/x), each with your own
+    tests as SPEC.md describes. Land each module as its own commit on feat/x. Run `sh check.sh`
+    as the very last step.
 graders:
   - name: plan-skill
     type: tool_used

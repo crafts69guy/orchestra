@@ -32,6 +32,7 @@ Base branch: <F>   # the branch the tasks merge into
   goal: <one sentence, observable outcome>
   files: [<paths this task owns>]
   depends_on: []
+  size: small        # or substantial (rule below)
   validate: <command that proves this task works>
   decisions: [<task-specific choices>]
 ```
@@ -43,14 +44,20 @@ Base branch: <F>   # the branch the tasks merge into
   share a file. If they must, add a `depends_on` edge or merge the tasks.
 - Shared files that everyone touches (lockfiles, barrel exports, registries) go
   to one task that the others depend on.
-- Each task is 1 implementer-sized unit: one edit-and-test loop, not a project.
+- Each task is 1 implementer-sized unit (one module or feature), not a project.
+- `size` is `substantial` when the task is its own module or feature needing
+  several edit-and-test cycles, roughly 100+ changed lines; otherwise `small`.
 - `validate` runs inside the task's own worktree and must not need other
   unmerged tasks.
 - Don't split one feature into many tiny tasks. Separate features stay separate
-  tasks, even when each one is small.
+  tasks (each can land as its own commit), but small ones are batched, not
+  dispatched (below).
 
 ## After writing
 
-Show the user the task table (id, goal, depends_on) in a few lines. If 2+ tasks
-are independent, continue with the `dispatch` skill; otherwise run implementers
-one at a time.
+Show the user the task table (id, goal, size, depends_on) in a few lines. If 2+
+independent tasks are `substantial`, continue with the `dispatch` skill for
+them. Batch the `small` tasks into one implementer task (all of them, in order,
+on the feature branch); run the rest (a lone or dependent substantial task) with
+its own implementer, one at a time. Parallel worktrees only pay off when each
+task is substantial.

@@ -1,6 +1,6 @@
 {
   "name": "orch",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Orchestrator workflow: scope, implement, review, ship via specialised subagents and worktrees.",
   "author": {
     "name": "crafts69guy"
