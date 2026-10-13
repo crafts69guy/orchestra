@@ -49,9 +49,10 @@ Updating meant three commands in three tools (npm, `claude plugin`, `codex plugi
 2. `claude plugin marketplace update orchestra` and `claude plugin update orch@orchestra`,
    when `claude plugin marketplace list --json` names `orchestra`.
 3. `codex plugin marketplace upgrade orchestra`, when `codex plugin marketplace list --json`
-   names `orchestra`, then `codex plugin add orch@orchestra` when `codex plugin list --json`
-   has it installed. Codex keeps installed plugins in a per-version cache, so the idempotent
-   re-add makes sure the installed copy follows the refreshed marketplace (0.6.2).
+   names `orchestra`. The upgrade also moves an installed `orch@orchestra` to the new
+   version (checked from 0.6.1 to 0.6.2: the per-version cache `orch/0.6.1` became
+   `orch/0.6.2`), so no `codex plugin add` follows. 0.6.2 re-added the plugin after the
+   upgrade anyway; 0.6.3 dropped that step.
 
 A harness is updated only when it has the `orchestra` marketplace, not merely when its
 binary is on `PATH`: 0.6.0 gated on `PATH`, and `codex plugin marketplace upgrade` fails

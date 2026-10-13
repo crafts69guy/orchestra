@@ -7,7 +7,6 @@ import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   claudeArgs,
-  codexHasOrch,
   commands,
   hasOrchestra,
   main,
@@ -127,8 +126,7 @@ test('doctor prints one line per check and returns its code', () => {
 });
 
 /** Fake `exec` for `<cmd> plugin marketplace list --json`: `lists[cmd]` is the result. */
-const marketplaces = (lists) => (cmd, args) =>
-  (args[1] === 'list' ? lists[`${cmd} plugins`] : lists[cmd]) ?? { status: 127, stdout: '' };
+const marketplaces = (lists) => (cmd) => lists[cmd] ?? { status: 127, stdout: '' };
 const ORCHESTRA = { status: 0, stdout: '[{"name":"orchestra"}]' };
 
 test('update runs npm, claude and codex steps; skips npm in a checkout and harnesses without orchestra', () => {
@@ -163,31 +161,6 @@ test('update runs npm, claude and codex steps; skips npm in a checkout and harne
     ['codex'],
   );
   assert.match(checkout.err, /git checkout; skipping npm/);
-});
-
-test('update re-adds the Codex plugin after the upgrade when it is installed', () => {
-  const io = fakeIo({
-    exec: marketplaces({
-      codex: { status: 0, stdout: '{"marketplaces":[{"name":"orchestra"}]}' },
-      'codex plugins': { status: 0, stdout: '{"installed":[{"pluginId":"orch@orchestra"}]}' },
-    }),
-  });
-  assert.equal(run(['update'], io), 0);
-  assert.deepEqual(
-    io.spawned.map((s) => s.args.join(' ')),
-    ['plugin marketplace upgrade orchestra', 'plugin add orch@orchestra'],
-  );
-});
-
-test('codexHasOrch is false for a failed list, garbled output or no orch entry', () => {
-  const io = (r) => ({ exec: () => r });
-  assert.equal(codexHasOrch(io({ status: 1, stdout: '' })), false);
-  assert.equal(codexHasOrch(io({ status: 0, stdout: 'nope' })), false);
-  assert.equal(codexHasOrch(io({ status: 0, stdout: 'null' })), false);
-  assert.equal(
-    codexHasOrch(io({ status: 0, stdout: '{"installed":[null,{"pluginId":"x"}]}' })),
-    false,
-  );
 });
 
 test('hasOrchestra is false for a missing binary, a failed list or garbled output', () => {
