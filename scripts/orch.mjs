@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { pluginRoot, which } from '../hooks/session-start.mjs';
 import { run as doctor } from './doctor.mjs';
 import { run as codex, gitCommonDir, spawnExit } from './orch-codex.mjs';
-import { run as wt, realDeps as wtDeps } from './orch-wt.mjs';
+import { exec, run as wt, realDeps as wtDeps } from './orch-wt.mjs';
 
 export const USAGE = `usage: orch <command> [args]
 
@@ -37,22 +37,39 @@ export function claudeArgs(args) {
 }
 
 /**
+ * True when `cmd plugin marketplace list --json` names the `orchestra` marketplace. Claude prints
+ * an array, Codex `{ marketplaces: [...] }`. A missing binary or unparsable output is false.
+ */
+export function hasOrchestra(io, cmd) {
+  const r = io.exec(cmd, ['plugin', 'marketplace', 'list', '--json']);
+  if (r.status !== 0) return false;
+  try {
+    const out = JSON.parse(r.stdout);
+    const list = Array.isArray(out) ? out : (out?.marketplaces ?? []);
+    return list.some((m) => m?.name === 'orchestra');
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Steps of `orch update` as `[cmd, args]`. The npm step is skipped in a git checkout (update it
- * with `git pull`); a harness step is skipped when that harness is not on PATH.
+ * with `git pull`); a harness step is skipped unless that harness has the `orchestra` marketplace.
  */
 export function updateSteps(io) {
-  const has = (cmd) => io.hasCommand(cmd, io.env.PATH ?? '');
   return [
     ...(io.exists(join(io.root, '.git'))
       ? []
       : [['npm', ['install', '-g', '@crafts69guy/orchestra@latest']]]),
-    ...(has('claude')
+    ...(hasOrchestra(io, 'claude')
       ? [
           ['claude', ['plugin', 'marketplace', 'update', 'orchestra']],
           ['claude', ['plugin', 'update', 'orch@orchestra']],
         ]
       : []),
-    ...(has('codex') ? [['codex', ['plugin', 'marketplace', 'upgrade', 'orchestra']]] : []),
+    ...(hasOrchestra(io, 'codex')
+      ? [['codex', ['plugin', 'marketplace', 'upgrade', 'orchestra']]]
+      : []),
   ];
 }
 
@@ -138,6 +155,7 @@ export function realIo(proc, metaUrl) {
     read: readFileSync,
     readdir: readdirSync,
     hasCommand: which,
+    exec,
     gitDir: gitCommonDir,
     wtDeps,
   };

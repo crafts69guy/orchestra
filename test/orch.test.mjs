@@ -5,7 +5,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { claudeArgs, commands, main, run, splitYolo, USAGE } from '../scripts/orch.mjs';
+import {
+  claudeArgs,
+  commands,
+  hasOrchestra,
+  main,
+  run,
+  splitYolo,
+  USAGE,
+} from '../scripts/orch.mjs';
 
 const tmp = mkdtempSync(join(tmpdir(), 'orch-cli-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
@@ -117,8 +125,18 @@ test('doctor prints one line per check and returns its code', () => {
   assert.ok(io.out.endsWith('\n'));
 });
 
-test('update runs npm, claude and codex steps; skips npm in a checkout and missing harnesses', () => {
-  const io = fakeIo({ exists: () => false, hasCommand: () => true });
+/** Fake `exec` for `<cmd> plugin marketplace list --json`: `lists[cmd]` is the result. */
+const marketplaces = (lists) => (cmd) => lists[cmd] ?? { status: 127, stdout: '' };
+const ORCHESTRA = { status: 0, stdout: '[{"name":"orchestra"}]' };
+
+test('update runs npm, claude and codex steps; skips npm in a checkout and harnesses without orchestra', () => {
+  const io = fakeIo({
+    exists: () => false,
+    exec: marketplaces({
+      claude: ORCHESTRA,
+      codex: { status: 0, stdout: '{"marketplaces":[{"name":"orchestra"}]}' },
+    }),
+  });
   assert.equal(run(['update'], io), 0);
   assert.deepEqual(
     io.spawned.map((s) => [s.cmd, ...s.args].join(' ')),
@@ -131,7 +149,12 @@ test('update runs npm, claude and codex steps; skips npm in a checkout and missi
   );
   assert.match(io.out, /restart Claude Code/);
 
-  const checkout = fakeIo({ hasCommand: (c) => c === 'codex', env: {} });
+  const checkout = fakeIo({
+    exec: marketplaces({
+      claude: { status: 0, stdout: '[{"name":"other"}]' },
+      codex: { status: 0, stdout: '{"marketplaces":[{"name":"orchestra"}]}' },
+    }),
+  });
   assert.equal(run(['update'], checkout), 0);
   assert.deepEqual(
     checkout.spawned.map((s) => s.cmd),
@@ -140,9 +163,17 @@ test('update runs npm, claude and codex steps; skips npm in a checkout and missi
   assert.match(checkout.err, /git checkout; skipping npm/);
 });
 
+test('hasOrchestra is false for a missing binary, a failed list or garbled output', () => {
+  const io = (r) => ({ exec: () => r });
+  assert.equal(hasOrchestra(io({ status: 127, stdout: '' }), 'codex'), false);
+  assert.equal(hasOrchestra(io({ status: 0, stdout: 'not json' }), 'codex'), false);
+  assert.equal(hasOrchestra(io({ status: 0, stdout: 'null' }), 'codex'), false);
+  assert.equal(hasOrchestra(io({ status: 0, stdout: '[null]' }), 'claude'), false);
+});
+
 test('update keeps going after a failure and returns the first non-zero code', () => {
   const codes = [3, 0, 5];
-  const io = fakeIo({ exists: () => false, hasCommand: (c) => c === 'claude' });
+  const io = fakeIo({ exists: () => false, exec: marketplaces({ claude: ORCHESTRA }) });
   io.spawn = (cmd, args) => {
     io.spawned.push({ cmd, args });
     return { status: codes.shift() };

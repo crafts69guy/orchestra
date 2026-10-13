@@ -178,7 +178,7 @@ flowchart LR
 | `orch codex [--yolo] [args]` | Codex launcher (§4); `--yolo` → `--dangerously-bypass-approvals-and-sandbox` |
 | `orch wt new\|merge\|list` | worktree helper for dispatch (§8) |
 | `orch doctor` | checks node, git, `wt`, a harness and the installed plugins; exit 1 if a required check fails |
-| `orch update` | `npm i -g` the CLI (skipped in a git checkout), then updates the plugin for each harness on `PATH`; runs every step, exits with the first failure |
+| `orch update` | `npm i -g` the CLI (skipped in a git checkout), then updates the plugin for each harness that has the `orchestra` marketplace; runs every step, exits with the first failure |
 | `orch eval [args]` | behaviour evals; exits 1 when `evals/` is absent (npm install) |
 
 Exit codes pass through from the child (a signal becomes 1); a missing
