@@ -13,6 +13,7 @@ commands:
   codex [--yolo] [args]    run codex with the orch workflow
   wt new|merge|list ...    manage task worktrees (prints JSON)
   doctor                   check prerequisites
+  update                   update the npm CLI and the installed Claude/Codex plugins
   eval [args]              run the behaviour evals (git checkout only)
   help, -h, --help         show this help
   -V, --version            print the version
@@ -32,6 +33,26 @@ export function claudeArgs(args) {
     ...(hasModel ? [] : ['--model', 'opus']),
     ...(yolo ? ['--dangerously-skip-permissions'] : []),
     ...rest,
+  ];
+}
+
+/**
+ * Steps of `orch update` as `[cmd, args]`. The npm step is skipped in a git checkout (update it
+ * with `git pull`); a harness step is skipped when that harness is not on PATH.
+ */
+export function updateSteps(io) {
+  const has = (cmd) => io.hasCommand(cmd, io.env.PATH ?? '');
+  return [
+    ...(io.exists(join(io.root, '.git'))
+      ? []
+      : [['npm', ['install', '-g', '@crafts69guy/orchestra@latest']]]),
+    ...(has('claude')
+      ? [
+          ['claude', ['plugin', 'marketplace', 'update', 'orchestra']],
+          ['claude', ['plugin', 'update', 'orch@orchestra']],
+        ]
+      : []),
+    ...(has('codex') ? [['codex', ['plugin', 'marketplace', 'upgrade', 'orchestra']]] : []),
   ];
 }
 
@@ -60,6 +81,20 @@ export const commands = {
   doctor(_args, io) {
     const { code, lines } = doctor(io.doctorDeps);
     io.stdout(`${lines.join('\n')}\n`);
+    return code;
+  },
+  /** Runs every step even after a failure; returns the first non-zero code. */
+  update(_args, io) {
+    if (io.exists(join(io.root, '.git'))) {
+      io.stderr(`orch: ${io.root} is a git checkout; skipping npm (run git pull there)\n`);
+    }
+    let code = 0;
+    for (const [cmd, args] of updateSteps(io)) {
+      io.stdout(`$ ${cmd} ${args.join(' ')}\n`);
+      const c = spawnExit(io.spawn(cmd, args, { env: io.env }), cmd, io.stderr, 'skipping.');
+      if (c !== 0 && code === 0) code = c;
+    }
+    if (code === 0) io.stdout('orch: updated; restart Claude Code / Codex sessions to apply\n');
     return code;
   },
   eval(args, io) {

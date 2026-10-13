@@ -117,6 +117,41 @@ test('doctor prints one line per check and returns its code', () => {
   assert.ok(io.out.endsWith('\n'));
 });
 
+test('update runs npm, claude and codex steps; skips npm in a checkout and missing harnesses', () => {
+  const io = fakeIo({ exists: () => false, hasCommand: () => true });
+  assert.equal(run(['update'], io), 0);
+  assert.deepEqual(
+    io.spawned.map((s) => [s.cmd, ...s.args].join(' ')),
+    [
+      'npm install -g @crafts69guy/orchestra@latest',
+      'claude plugin marketplace update orchestra',
+      'claude plugin update orch@orchestra',
+      'codex plugin marketplace upgrade orchestra',
+    ],
+  );
+  assert.match(io.out, /restart Claude Code/);
+
+  const checkout = fakeIo({ hasCommand: (c) => c === 'codex', env: {} });
+  assert.equal(run(['update'], checkout), 0);
+  assert.deepEqual(
+    checkout.spawned.map((s) => s.cmd),
+    ['codex'],
+  );
+  assert.match(checkout.err, /git checkout; skipping npm/);
+});
+
+test('update keeps going after a failure and returns the first non-zero code', () => {
+  const codes = [3, 0, 5];
+  const io = fakeIo({ exists: () => false, hasCommand: (c) => c === 'claude' });
+  io.spawn = (cmd, args) => {
+    io.spawned.push({ cmd, args });
+    return { status: codes.shift() };
+  };
+  assert.equal(run(['update'], io), 3);
+  assert.equal(io.spawned.length, 3);
+  assert.doesNotMatch(io.out, /updated;/);
+});
+
 test('eval runs run.sh from the plugin root, or explains it needs the git checkout', () => {
   const io = fakeIo({ spawnResult: { status: 0 } });
   assert.equal(run(['eval', '--case', 'x'], io), 0);

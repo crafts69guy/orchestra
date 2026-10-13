@@ -97,7 +97,7 @@ orchestra/
 │   ├── session-start.mjs        # ORCH gate, rules injection, wt check
 │   ├── guard.mjs                # PreToolUse: push/PR only from shipper
 │   └── subagent-stop.mjs        # implementer evidence gate
-├── bin/orch                     # CLI entry (npm bin): claude, codex, wt, doctor, eval
+├── bin/orch                     # CLI entry (npm bin): claude, codex, wt, doctor, update, eval
 ├── scripts/
 │   ├── orch.mjs                 # subcommand dispatcher, `orch claude`
 │   ├── orch-wt.mjs              # `orch wt`: worktrunk wrapper used by dispatch
@@ -167,6 +167,7 @@ flowchart LR
   disp -->|"codex [--yolo]"| ocx["scripts/orch-codex.mjs"] --> codex["codex"]
   disp -->|"wt new · merge · list"| owt["scripts/orch-wt.mjs"] --> wt["worktrunk + git"]
   disp -->|"doctor"| doc["scripts/doctor.mjs"]
+  disp -->|"update"| upd["npm, claude plugin,<br/>codex plugin"]
   disp -->|"eval"| ev["evals/_support/run.sh<br/>(git checkout only)"]
   disp -->|"--help · --version"| pkg["usage, package.json"]
 ```
@@ -177,6 +178,7 @@ flowchart LR
 | `orch codex [--yolo] [args]` | Codex launcher (§4); `--yolo` → `--dangerously-bypass-approvals-and-sandbox` |
 | `orch wt new\|merge\|list` | worktree helper for dispatch (§8) |
 | `orch doctor` | checks node, git, `wt`, a harness and the installed plugins; exit 1 if a required check fails |
+| `orch update` | `npm i -g` the CLI (skipped in a git checkout), then updates the plugin for each harness on `PATH`; runs every step, exits with the first failure |
 | `orch eval [args]` | behaviour evals; exits 1 when `evals/` is absent (npm install) |
 
 Exit codes pass through from the child (a signal becomes 1); a missing

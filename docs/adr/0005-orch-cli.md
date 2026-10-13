@@ -38,3 +38,18 @@ find. The unscoped npm name `orchestra` is taken.
 - Anything that called `orch-wt` or `orch-codex` breaks; the dotfiles are
   updated in the same release.
 - Package version and both plugin manifests move together (0.3.0).
+
+## Amendment (v0.6.0): `orch update`
+
+Updating meant three commands in three tools (npm, `claude plugin`, `codex plugin`).
+`orch update` runs them in order:
+
+1. `npm install -g @crafts69guy/orchestra@latest`, skipped when the plugin root is a
+   git checkout (`npm link`); it prints a `git pull` hint instead.
+2. `claude plugin marketplace update orchestra` and `claude plugin update orch@orchestra`,
+   when `claude` is on `PATH`.
+3. `codex plugin marketplace upgrade orchestra`, when `codex` is on `PATH`. Codex installs
+   the plugin from the marketplace snapshot, so refreshing it is the update.
+
+Every step runs even after a failure; the exit code is the first non-zero one. Running
+sessions keep the old version until restarted.
