@@ -39,6 +39,7 @@ Codex:
 
 ```sh
 codex plugin marketplace add crafts69guy/orchestra
+codex plugin add orch@orchestra
 ```
 
 ## Usage
@@ -48,7 +49,7 @@ codex plugin marketplace add crafts69guy/orchestra
 | `orch doctor` | checks Node, git, `wt`, the harness CLIs and the installed plugins |
 | `orch claude [--yolo] [args...]` | starts `claude` with `ORCH=1` and `--model opus` (unless you pass `--model`) |
 | `orch codex [--yolo] [args...]` | starts `codex` with `ORCH=1` and the orchestration context (below) |
-| `orch update` | updates the npm CLI, then the plugin for each harness that has the `orchestra` marketplace (`claude plugin update orch@orchestra`, `codex plugin marketplace upgrade orchestra`); skips npm from a git checkout |
+| `orch update` | updates the npm CLI, then the plugin for each harness that has the `orchestra` marketplace (`claude plugin update orch@orchestra`, `codex plugin marketplace upgrade orchestra`, then `codex plugin add orch@orchestra` if installed); skips npm from a git checkout |
 | `orch wt new\|merge\|list ...` | worktree helper used by the `dispatch` skill; prints JSON |
 | `orch eval [args...]` | behaviour evals; only from a git checkout (see [AGENTS.md](AGENTS.md)) |
 | `orch --help`, `orch --version` | usage and version |

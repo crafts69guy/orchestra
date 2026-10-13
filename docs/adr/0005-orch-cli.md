@@ -49,8 +49,9 @@ Updating meant three commands in three tools (npm, `claude plugin`, `codex plugi
 2. `claude plugin marketplace update orchestra` and `claude plugin update orch@orchestra`,
    when `claude plugin marketplace list --json` names `orchestra`.
 3. `codex plugin marketplace upgrade orchestra`, when `codex plugin marketplace list --json`
-   names `orchestra`. Codex installs the plugin from the marketplace snapshot, so refreshing
-   it is the update.
+   names `orchestra`, then `codex plugin add orch@orchestra` when `codex plugin list --json`
+   has it installed. Codex keeps installed plugins in a per-version cache, so the idempotent
+   re-add makes sure the installed copy follows the refreshed marketplace (0.6.2).
 
 A harness is updated only when it has the `orchestra` marketplace, not merely when its
 binary is on `PATH`: 0.6.0 gated on `PATH`, and `codex plugin marketplace upgrade` fails

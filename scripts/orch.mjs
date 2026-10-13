@@ -53,6 +53,22 @@ export function hasOrchestra(io, cmd) {
 }
 
 /**
+ * True when `codex plugin list --json` has `orch@orchestra` under `installed`. Codex keeps the
+ * installed copy in a per-version cache, so `orch update` re-adds it after the marketplace
+ * upgrade; `codex plugin add` is idempotent.
+ */
+export function codexHasOrch(io) {
+  const r = io.exec('codex', ['plugin', 'list', '--json']);
+  if (r.status !== 0) return false;
+  try {
+    const installed = JSON.parse(r.stdout)?.installed ?? [];
+    return installed.some((p) => p?.pluginId === 'orch@orchestra');
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Steps of `orch update` as `[cmd, args]`. The npm step is skipped in a git checkout (update it
  * with `git pull`); a harness step is skipped unless that harness has the `orchestra` marketplace.
  */
@@ -68,7 +84,10 @@ export function updateSteps(io) {
         ]
       : []),
     ...(hasOrchestra(io, 'codex')
-      ? [['codex', ['plugin', 'marketplace', 'upgrade', 'orchestra']]]
+      ? [
+          ['codex', ['plugin', 'marketplace', 'upgrade', 'orchestra']],
+          ...(codexHasOrch(io) ? [['codex', ['plugin', 'add', 'orch@orchestra']]] : []),
+        ]
       : []),
   ];
 }
