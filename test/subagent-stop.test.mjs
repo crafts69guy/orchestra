@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { BLOCK_REASON, hasEvidence, main, run } from '../hooks/subagent-stop.mjs';
+import { BLOCK_REASON, handbackReport, hasEvidence, main, run } from '../hooks/subagent-stop.mjs';
 
 const script = fileURLToPath(new URL('../hooks/subagent-stop.mjs', import.meta.url));
 const GOOD = 'Status: done\n\nChanges: x\n\nValidation: `npm test` passed\n';
@@ -23,10 +23,10 @@ test('hasEvidence rejects missing or malformed pieces', () => {
   assert.equal(hasEvidence(undefined), false);
 });
 
-function call(env, payload) {
+function call(env, payload, readFile) {
   let stdout = '';
   const input = typeof payload === 'string' ? payload : JSON.stringify(payload);
-  const code = run({ env, input, stdout: (s) => (stdout += s) });
+  const code = run({ env, input, stdout: (s) => (stdout += s), readFile });
   return { code, stdout };
 }
 const stop = (extra) => ({ agent_type: 'orch:implementer', stop_hook_active: false, ...extra });
@@ -88,4 +88,43 @@ test('script entrypoint reads stdin end to end', () => {
   const garbage = spawnSync(process.execPath, [script], opts(ON, 'nope'));
   assert.equal(garbage.status, 0);
   assert.equal(garbage.stdout, '');
+});
+
+const handback = (message) =>
+  JSON.stringify({
+    type: 'assistant',
+    message: { content: [{ type: 'tool_use', name: 'SubagentHandback', input: { message } }] },
+  });
+const transcript =
+  (...lines) =>
+  () =>
+    lines.join('\n');
+
+test('handbackReport takes the last SubagentHandback message and tolerates junk', () => {
+  const text = transcript(
+    'not json',
+    '{"message":{"content":"str"}}',
+    handback('first'),
+    handback('last'),
+    '',
+  );
+  assert.equal(handbackReport('/t', text), 'last');
+  assert.equal(handbackReport('/t', transcript('{}')), undefined);
+  assert.equal(handbackReport('', text), undefined);
+  assert.equal(handbackReport(undefined, text), undefined);
+  assert.equal(
+    handbackReport('/t', () => {
+      throw new Error('ENOENT');
+    }),
+    undefined,
+  );
+  assert.equal(handbackReport('/definitely/missing.jsonl'), undefined);
+});
+
+test('run allows a complete SubagentHandback report from the transcript', () => {
+  const p = stop({ last_assistant_message: '', agent_transcript_path: '/t' });
+  assert.deepEqual(call(ON, p, transcript(handback(GOOD))), SILENT);
+  assert.equal(call(ON, p, transcript(handback('all done'))).stdout.includes('block'), true);
+  assert.equal(call(ON, p, () => assert.fail).stdout.includes('block'), true);
+  assert.equal(call(ON, stop({ last_assistant_message: '' })).stdout.includes('block'), true);
 });
