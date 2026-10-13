@@ -13,6 +13,7 @@ Subagents: `scoper`, `implementer`, `reviewer`, `shipper`. On Claude Code call t
 - **Parallel:** use the `dispatch` skill without asking when a plan has 2+ independent tasks (no `depends_on` path, disjoint `files`) that are each substantial: its own module or feature needing several edit-and-test cycles, roughly 100+ changed lines. Independent small tasks go to one `implementer` as a single batched task, done in order, not to dispatch. Never run two writers on the same checkout.
   Measured: dispatch was no faster on 4 tiny modules (115 s vs 118 s, +45% cost) and 21% faster on 3 large ones (+22% cost).
 - **Review:** review every implementer diff yourself and rerun its validation. Use `reviewer` (fresh context: diff, brief, acceptance criteria) for risky changes (security, concurrency, migrations, public APIs) or on request. At most 2 fix rounds.
+  Also check the Docs/JSDoc criterion. <!-- orch:docs -->
 - **Shipping:** delegate commit, push and PR to `shipper` only after review passes and the user asked to ship.
 - **Stays with you:** scope, architecture, cross-cutting decisions, root-cause analysis, merge conflicts, escalations.
 
@@ -20,6 +21,7 @@ Subagents: `scoper`, `implementer`, `reviewer`, `shipper`. On Claude Code call t
 
 Subagents do not see this conversation. Decide interfaces, names and libraries before delegating, then send:
 objective · decisions already made · files in scope and out of scope · constraints · validation command · stop conditions.
+Docs/JSDoc: new or changed exported types, functions and their fields carry JSDoc in the repo's doc style, and docs the change touches (ADRs, glossary, guides) are updated; the orchestrator checks this when reviewing the diff. <!-- orch:docs -->
 Point to the plan/brief file and section instead of restating it. Pass paths and commit SHAs, not "what we discussed".
 
 ## Results

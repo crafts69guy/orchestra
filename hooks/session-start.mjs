@@ -30,9 +30,18 @@ export function which(name, pathEnv = '') {
   });
 }
 
+/** Lines ending in `<!-- orch:docs -->` are the Docs/JSDoc criterion: dropped when off, marker stripped when on. */
+export function applyDocs(rules, docs) {
+  return rules
+    .split('\n')
+    .filter((l) => docs || !l.includes('<!-- orch:docs -->'))
+    .map((l) => l.replace(/ *<!-- orch:docs -->$/, ''))
+    .join('\n');
+}
+
 /** `orchPath` is the absolute `bin/orch`; plugin bin/ is not on PATH under Codex, so name it. */
-export function buildContext(rules, hasWt, orchPath) {
-  const withCli = `${rules.trimEnd()}\n\norch CLI: ${orchPath} (use \`${orchPath} wt new|merge|list\`)\n`;
+export function buildContext(rules, hasWt, orchPath, docs = true) {
+  const withCli = `${applyDocs(rules, docs).trimEnd()}\n\norch CLI: ${orchPath} (use \`${orchPath} wt new|merge|list\`)\n`;
   return hasWt ? withCli : `${withCli}\n${WT_WARNING}\n`;
 }
 
@@ -50,7 +59,16 @@ export function run({ env, root, read, hasCommand, stdout, stderr }) {
     stderr(`orch: rules/orchestrator.md not found under ${root}; skipping injection\n`);
     return 0;
   }
-  stdout(formatOutput(buildContext(rules, hasCommand('wt', env.PATH), join(root, 'bin', 'orch'))));
+  stdout(
+    formatOutput(
+      buildContext(
+        rules,
+        hasCommand('wt', env.PATH),
+        join(root, 'bin', 'orch'),
+        env.ORCH_DOCS !== '0',
+      ),
+    ),
+  );
   return 0;
 }
 

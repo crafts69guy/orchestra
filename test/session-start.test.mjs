@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { after, test } from 'node:test';
@@ -182,4 +190,30 @@ test('hook runs when invoked through a symlinked plugin dir', () => {
   });
   assert.equal(r.status, 0);
   assert.match(r.stdout, /hookSpecificOutput/);
+});
+
+test('buildContext keeps docs lines without their marker, or drops them when ORCH_DOCS is off', () => {
+  const rules = '# R\nkeep\nDocs line. <!-- orch:docs -->\n  Indented. <!-- orch:docs -->\nend\n';
+  const cli = '\n\norch CLI: /p (use `/p wt new|merge|list`)\n';
+  assert.equal(buildContext(rules, true, '/p'), `# R\nkeep\nDocs line.\n  Indented.\nend${cli}`);
+  assert.equal(buildContext(rules, true, '/p', false), `# R\nkeep\nend${cli}`);
+});
+
+test('run drops docs lines only when ORCH_DOCS=0', () => {
+  const rules = 'a\nb <!-- orch:docs -->\n';
+  const ctx = (envDocs) => {
+    const root = fixtureRoot(`docs-${envDocs}`, rules);
+    let out = '';
+    run({
+      env: { ORCH: '1', PATH: '', ORCH_DOCS: envDocs },
+      root,
+      read: readFileSync,
+      hasCommand: () => true,
+      stdout: (s) => (out += s),
+      stderr: () => {},
+    });
+    return JSON.parse(out).hookSpecificOutput.additionalContext;
+  };
+  assert.match(ctx('1'), /\nb\n/);
+  assert.doesNotMatch(ctx('0'), /\nb\b/);
 });

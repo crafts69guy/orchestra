@@ -20,3 +20,4 @@ Report with these sections:
 - Changes: files touched and what changed.
 - Validation: each command you ran and its result, as evidence.
 - Notes: deviations, open questions, anything unverified.
+- Docs: if the brief includes Docs/JSDoc, list the JSDoc and docs you added.

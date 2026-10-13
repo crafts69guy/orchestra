@@ -59,6 +59,9 @@ permission model. Other arguments pass through to the harness, and so does its e
 `orch claude` only sets `ORCH=1`; `ORCH=1 claude` works too. Without `ORCH=1` the hooks exit
 silently and the session is untouched.
 
+The handoff brief to `implementer` includes a Docs/JSDoc acceptance criterion (new or changed exports
+carry JSDoc, touched docs are updated). `ORCH_DOCS=0` turns it off; any other value keeps it on.
+
 ## Codex
 
 Codex does not trust project agents or plugin hooks by default, so `orch codex` runs `codex`

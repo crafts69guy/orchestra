@@ -63,7 +63,12 @@ export function run({ argv, env, root, cwd, read, readdir, hasCommand, gitDir, s
     stderr(`orch codex: rules/orchestrator.md not found under ${root}\n`);
     return 1;
   }
-  const context = buildContext(rules, hasCommand('wt', env.PATH), join(root, 'bin', 'orch'));
+  const context = buildContext(
+    rules,
+    hasCommand('wt', env.PATH),
+    join(root, 'bin', 'orch'),
+    env.ORCH_DOCS !== '0',
+  );
   const prefix = buildArgs({
     context,
     agents: agentArgs(root, { read, readdir }),
