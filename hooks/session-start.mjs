@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-import { accessSync, constants, readFileSync, realpathSync } from 'node:fs';
+import { accessSync, constants, existsSync, readFileSync, realpathSync } from 'node:fs';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { cccEnabled } from '../scripts/ccc.mjs';
+import { exec } from '../scripts/orch-wt.mjs';
 
 export const WT_WARNING =
   'orch: `wt` (worktrunk) not found on PATH; parallel dispatch needs it (`brew install worktrunk`).';
@@ -30,18 +32,22 @@ export function which(name, pathEnv = '') {
   });
 }
 
-/** Lines ending in `<!-- orch:docs -->` are the Docs/JSDoc criterion: dropped when off, marker stripped when on. */
-export function applyDocs(rules, docs) {
+/** A line ending in `<!-- orch:NAME -->` is dropped when `flags[NAME]` is falsy, else the marker is stripped. */
+export function applyMarkers(rules, flags) {
+  const marker = / *<!-- orch:(\w+) -->$/;
   return rules
     .split('\n')
-    .filter((l) => docs || !l.includes('<!-- orch:docs -->'))
-    .map((l) => l.replace(/ *<!-- orch:docs -->$/, ''))
+    .filter((l) => {
+      const name = marker.exec(l)?.[1];
+      return name === undefined || Boolean(flags[name]);
+    })
+    .map((l) => l.replace(marker, ''))
     .join('\n');
 }
 
 /** `orchPath` is the absolute `bin/orch`; plugin bin/ is not on PATH under Codex, so name it. */
-export function buildContext(rules, hasWt, orchPath, docs = true) {
-  const withCli = `${applyDocs(rules, docs).trimEnd()}\n\norch CLI: ${orchPath} (use \`${orchPath} wt new|merge|list\`)\n`;
+export function buildContext(rules, hasWt, orchPath, flags = { docs: true, ccc: false }) {
+  const withCli = `${applyMarkers(rules, flags).trimEnd()}\n\norch CLI: ${orchPath} (use \`${orchPath} wt new|merge|list\`)\n`;
   return hasWt ? withCli : `${withCli}\n${WT_WARNING}\n`;
 }
 
@@ -52,7 +58,7 @@ export function formatOutput(additionalContext) {
 }
 
 /** Returns the process exit code; never throws for a missing rules file. */
-export function run({ env, root, read, hasCommand, stdout, stderr }) {
+export function run({ env, root, cwd, read, hasCommand, exec, exists, stdout, stderr }) {
   if (env.ORCH !== '1') return 0;
   const rules = readRules(root, read);
   if (rules === null) {
@@ -61,12 +67,10 @@ export function run({ env, root, read, hasCommand, stdout, stderr }) {
   }
   stdout(
     formatOutput(
-      buildContext(
-        rules,
-        hasCommand('wt', env.PATH),
-        join(root, 'bin', 'orch'),
-        env.ORCH_DOCS !== '0',
-      ),
+      buildContext(rules, hasCommand('wt', env.PATH), join(root, 'bin', 'orch'), {
+        docs: env.ORCH_DOCS !== '0',
+        ccc: cccEnabled(env, cwd, { exec, exists, hasCommand }),
+      }),
     ),
   );
   return 0;
@@ -76,8 +80,11 @@ export function main(proc = process, metaUrl = import.meta.url) {
   proc.exitCode = run({
     env: proc.env,
     root: pluginRoot(metaUrl),
+    cwd: proc.cwd(),
     read: readFileSync,
     hasCommand: which,
+    exec,
+    exists: existsSync,
     stdout: (s) => proc.stdout.write(s),
     stderr: (s) => proc.stderr.write(s),
   });

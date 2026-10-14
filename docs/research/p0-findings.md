@@ -205,3 +205,18 @@ Side effect: even with `--no-session-persistence`, Claude created `~/.claude/pro
 6. **Codex hooks** are opt-in and dangerous-flagged. They must not be the only carrier of rules: use AGENTS.md or skill text, plus `developer_instructions` in the agent TOML.
 7. **Claude hooks:** match `agent_type` as `<plugin>:<agent>` (`orch:implementer`). Codex reports the bare name, so match both, for example by stripping the `^[^:]+:` prefix. PreToolUse inside subagents carries `agent_type`, which enables per-role guards. A SubagentStop block plus `stop_hook_active` gives one retry of a definition-of-done gate.
 8. **MCP in agents:** list `ToolSearch` together with `mcp__cocoindex-code__*`. In a fresh worktree without `ccc init`, the real ccc server fails, so search must degrade gracefully (fall back to rg). Whether ccc resolves a parent project from inside `.worktrees/` is untested.
+
+---
+
+## cocoindex-code via the launchers (v0.7.0)
+
+Checked on 2026-10-14 with Claude Code (session Opus 5.5, probes on Haiku), codex-cli 0.162.1 and ccc 0.2.42, in an indexed repo.
+
+| ID | Result | Key fact |
+|----|--------|----------|
+| M1 | PASS with `=` | `--mcp-config` is variadic. `--mcp-config <json> "prompt"` swallows the prompt ("MCP config file not found: .../reply with ..."). `--mcp-config=<json> "prompt"` keeps it: the server shows as `cocoindex-code`, `status:"connected"`, `source:"dynamic"`, and `mcp__cocoindex-code__search` is in the tool list. |
+| M2 | PASS | `codex -c 'mcp_servers.cocoindex-code.command="..."' -c '...args=["mcp"]' -c '...env.X="1"' -c '...enabled_tools=["search"]' mcp list --json` lists the server; the hyphenated key works and the overrides merge with an existing `[mcp_servers.cocoindex-code]` (its timeouts survive). A name with no config entry works too. |
+| M3 | PASS | `ccc init` prompts only when `~/.cocoindex_code/global_settings.yml` is missing (first run), prints "Project already initialized." when settings exist, and exits 1 when a parent directory has a project marker unless `-f`. `ccc index` auto-inits. |
+| M4 | PASS | With the user-scope `cocoindex-code` server still in `~/.claude.json`, the init event lists one `cocoindex-code`, from `source:"dynamic"`: `--mcp-config` wins. |
+
+Consequences: `orch claude` passes `--mcp-config=<json>`; `orch codex` passes the four `-c` overrides; `orch ccc init` never passes `-f`, so the parent-marker guard stays.

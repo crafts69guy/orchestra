@@ -14,6 +14,7 @@ import { delimiter, join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
+  applyMarkers,
   buildContext,
   formatOutput,
   isEntry,
@@ -41,7 +42,10 @@ function harness(overrides = {}) {
     env: { ORCH: '1', PATH: '/bin' },
     root: fixtureRoot('default', '# RULES\n'),
     read: undefined,
+    cwd: '/work',
     hasCommand: () => true,
+    exec: () => ({ status: 1, stdout: '' }),
+    exists: () => false,
     stdout: (s) => {
       out.stdout += s;
     },
@@ -131,7 +135,7 @@ test('run exits 0 with a stderr note when the rules file is missing', () => {
 });
 
 function fakeProcess(env) {
-  const proc = { env, out: '', err: '' };
+  const proc = { env, out: '', err: '', cwd: () => tmp };
   proc.stdout = {
     write(s) {
       proc.out += s;
@@ -196,7 +200,7 @@ test('buildContext keeps docs lines without their marker, or drops them when ORC
   const rules = '# R\nkeep\nDocs line. <!-- orch:docs -->\n  Indented. <!-- orch:docs -->\nend\n';
   const cli = '\n\norch CLI: /p (use `/p wt new|merge|list`)\n';
   assert.equal(buildContext(rules, true, '/p'), `# R\nkeep\nDocs line.\n  Indented.\nend${cli}`);
-  assert.equal(buildContext(rules, true, '/p', false), `# R\nkeep\nend${cli}`);
+  assert.equal(buildContext(rules, true, '/p', { docs: false }), `# R\nkeep\nend${cli}`);
 });
 
 test('run drops docs lines only when ORCH_DOCS=0', () => {
@@ -208,7 +212,10 @@ test('run drops docs lines only when ORCH_DOCS=0', () => {
       env: { ORCH: '1', PATH: '', ORCH_DOCS: envDocs },
       root,
       read: readFileSync,
+      cwd: '/work',
       hasCommand: () => true,
+      exec: () => ({ status: 1, stdout: '' }),
+      exists: () => false,
       stdout: (s) => (out += s),
       stderr: () => {},
     });
@@ -216,4 +223,27 @@ test('run drops docs lines only when ORCH_DOCS=0', () => {
   };
   assert.match(ctx('1'), /\nb\n/);
   assert.doesNotMatch(ctx('0'), /\nb\b/);
+});
+
+test('applyMarkers drops a line when its flag is falsy and strips the marker otherwise', () => {
+  const rules = 'a\nb <!-- orch:ccc -->\nc <!-- orch:docs -->\n';
+  assert.equal(applyMarkers(rules, { ccc: true, docs: false }), 'a\nb\n');
+  assert.equal(applyMarkers(rules, {}), 'a\n');
+  assert.equal(buildContext(rules, true, '/p').includes('b'), false);
+});
+
+test('run keeps ccc lines only when ccc is enabled for the git root', () => {
+  const rules = 'a\nb <!-- orch:ccc -->\n';
+  const ctx = (exists) => {
+    const { deps, out } = harness({
+      root: fixtureRoot(`ccc-${exists}`, rules),
+      read: readFileSync,
+      exec: () => ({ status: 0, stdout: '/repo\n' }),
+      exists: () => exists,
+    });
+    run(deps);
+    return JSON.parse(out.stdout).hookSpecificOutput.additionalContext;
+  };
+  assert.match(ctx(true), /\nb\n/);
+  assert.doesNotMatch(ctx(false), /\nb\b/);
 });

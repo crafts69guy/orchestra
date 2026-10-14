@@ -1,7 +1,8 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pluginRoot, which } from '../hooks/session-start.mjs';
+import { run as ccc, cccEnabled, claudeMcpArg } from './ccc.mjs';
 import { run as doctor } from './doctor.mjs';
 import { run as codex, gitCommonDir, spawnExit } from './orch-codex.mjs';
 import { exec, run as wt, realDeps as wtDeps } from './orch-wt.mjs';
@@ -12,6 +13,7 @@ commands:
   claude [--yolo] [args]   run claude with the orch workflow (ORCH=1, --model opus by default)
   codex [--yolo] [args]    run codex with the orch workflow
   wt new|merge|list ...    manage task worktrees (prints JSON)
+  ccc init [--force]       index this repo for semantic search (cocoindex-code)
   doctor                   check prerequisites
   update                   update the npm CLI and the installed Claude/Codex plugins
   eval [args]              run the behaviour evals (git checkout only)
@@ -26,10 +28,12 @@ export function splitYolo(args) {
   return { yolo: args.includes('--yolo'), rest: args.filter((a) => a !== '--yolo') };
 }
 
-export function claudeArgs(args) {
+/** Args for `claude`; `ccc` puts the cocoindex-code `--mcp-config=` first. */
+export function claudeArgs(args, ccc = false) {
   const { yolo, rest } = splitYolo(args);
   const hasModel = rest.some((a) => a === '--model' || a.startsWith('--model='));
   return [
+    ...(ccc ? [claudeMcpArg()] : []),
     ...(hasModel ? [] : ['--model', 'opus']),
     ...(yolo ? ['--dangerously-skip-permissions'] : []),
     ...rest,
@@ -52,6 +56,12 @@ export function hasOrchestra(io, cmd) {
   }
 }
 
+/** True when `uv tool list` shows cocoindex-code. */
+function hasCcc(io) {
+  const r = io.exec('uv', ['tool', 'list']);
+  return r.status === 0 && /^cocoindex-code /m.test(r.stdout);
+}
+
 /**
  * Steps of `orch update` as `[cmd, args]`. The npm step is skipped in a git checkout (update it
  * with `git pull`); a harness step is skipped unless that harness has the `orchestra` marketplace.
@@ -70,6 +80,7 @@ export function updateSteps(io) {
     ...(hasOrchestra(io, 'codex')
       ? [['codex', ['plugin', 'marketplace', 'upgrade', 'orchestra']]]
       : []),
+    ...(hasCcc(io) ? [['uv', ['tool', 'upgrade', 'cocoindex-code']]] : []),
   ];
 }
 
@@ -77,7 +88,9 @@ export function updateSteps(io) {
 export const commands = {
   claude: (args, io) =>
     spawnExit(
-      io.spawn('claude', claudeArgs(args), { env: { ...io.env, ORCH: '1' } }),
+      io.spawn('claude', claudeArgs(args, cccEnabled(io.env, io.cwd, io)), {
+        env: { ...io.env, ORCH: '1' },
+      }),
       'claude',
       io.stderr,
       'install Claude Code first.',
@@ -90,6 +103,7 @@ export const commands = {
       spawn: (a, env) => io.spawn('codex', a, { env }),
     });
   },
+  ccc: (args, io) => ccc(args, { ...io, spawnExit }),
   wt(args, io) {
     const { code, result } = wt(args, io.wtDeps, io.cwd);
     io.stdout(`${JSON.stringify(result)}\n`);
@@ -153,6 +167,7 @@ export function realIo(proc, metaUrl) {
     spawn: (cmd, args, opts) => spawnSync(cmd, args, { stdio: 'inherit', ...opts }),
     exists: existsSync,
     read: readFileSync,
+    write: writeFileSync,
     readdir: readdirSync,
     hasCommand: which,
     exec,

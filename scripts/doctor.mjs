@@ -64,6 +64,7 @@ export function run(deps = realDeps) {
     checkNode(deps.nodeVersion),
     checkTool(deps, 'git', ['--version'], 'install git'),
     checkTool(deps, 'wt', ['--version'], 'brew install worktrunk'),
+    checkTool(deps, 'ccc', ['version'], "uv tool install 'cocoindex-code[full]'", warn),
   ];
   const claude = checkTool(deps, 'claude', ['--version'], 'install Claude Code', warn);
   checks.push(claude);

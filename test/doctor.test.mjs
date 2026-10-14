@@ -16,6 +16,7 @@ function deps(overrides = {}, nodeVersion = '22.16.0') {
   const routes = {
     'git --version': ok('git version 2.55.0\n'),
     'wt --version': ok('wt v0.80.0\n'),
+    'ccc version': ok('ccc 0.4.0\n'),
     'claude --version': ok('2.1.0 (Claude Code)\n'),
     'claude plugin list --json': ok(PLUGINS),
     'codex --version': ok('codex-cli 0.162.1\n'),
@@ -31,6 +32,7 @@ test('all checks pass', () => {
       '✓ node  v22.16.0',
       '✓ git  git version 2.55.0',
       '✓ wt  wt v0.80.0',
+      '✓ ccc  ccc 0.4.0',
       '✓ claude  2.1.0 (Claude Code)',
       '✓ orch@orchestra  enabled (0.2.0, user)',
       '✓ ponytail@ponytail  enabled (0.2.0, user)',
@@ -66,7 +68,7 @@ test('a missing harness is a warning while the other one exists', () => {
 
   const noClaude = run(deps({ 'claude --version': undefined }));
   assert.equal(noClaude.code, 0);
-  assert.match(noClaude.lines[3], /^! claude .* — fix: install Claude Code$/);
+  assert.match(noClaude.lines[4], /^! claude .* — fix: install Claude Code$/);
   assert.ok(!noClaude.lines.some((l) => l.includes('orch@orchestra')), 'plugins skipped');
 });
 
@@ -90,10 +92,10 @@ test('orch missing fails, ponytail missing only warns', () => {
   const r = run(deps({ 'claude plugin list --json': ok('[]') }));
   assert.equal(r.code, 1);
   assert.match(
-    r.lines[4],
+    r.lines[5],
     /^✗ orch@orchestra {2}not installed or not enabled — fix: claude plugin marketplace add crafts69guy\/orchestra/,
   );
-  assert.match(r.lines[5], /^! ponytail@ponytail /);
+  assert.match(r.lines[6], /^! ponytail@ponytail /);
 });
 
 test('unusable plugin list output becomes a failed orch check', () => {
@@ -131,4 +133,14 @@ test('a tool failing with empty output reads as not found', () => {
 test('realDeps uses the running node and the real exec', () => {
   assert.equal(realDeps.nodeVersion, process.versions.node);
   assert.equal(realDeps.exec('git', ['--version']).status, 0);
+});
+
+test('a missing ccc only warns', () => {
+  const r = run(deps({ 'ccc version': undefined }));
+  assert.equal(r.code, 0);
+  assert.ok(
+    r.lines.some(
+      (l) => l.startsWith('! ccc') && l.includes("uv tool install 'cocoindex-code[full]'"),
+    ),
+  );
 });

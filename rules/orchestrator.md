@@ -8,6 +8,7 @@ Subagents: `scoper`, `implementer`, `reviewer`, `shipper`. On Claude Code call t
 
 - **Inline only** when the whole request is one file with one change and no new tests, or during heavy back-and-forth with the user. Anything bigger is never "small", however simple each part looks.
 - **Scoping:** run `scoper` first on non-trivial work in unfamiliar code, unless you expect to read 3 or fewer new files. Spot-check its brief.
+- **Search:** for concept-level questions use `mcp__cocoindex-code__search` (load it with `ToolSearch`; `scoper` has it) or `ccc search --refresh`; use `rg` for exact names. <!-- orch:ccc -->
 - **Implementation:** delegate to `implementer` when the change spans 2+ files, adds or fixes tests, or needs more than one edit-and-test cycle.
 - **Planning:** for work with 2+ separable parts, use the `plan` skill to write `.scratch/<feature>/plan.md` before implementing.
 - **Parallel:** use the `dispatch` skill without asking when a plan has 2+ independent tasks (no `depends_on` path, disjoint `files`) that are each substantial: its own module or feature needing several edit-and-test cycles, roughly 100+ changed lines. Independent small tasks go to one `implementer` as a single batched task, done in order, not to dispatch. Never run two writers on the same checkout.
