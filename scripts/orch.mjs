@@ -70,7 +70,7 @@ export function updateSteps(io) {
   return [
     ...(io.exists(join(io.root, '.git'))
       ? []
-      : [['npm', ['install', '-g', '@crafts69guy/orchestra@latest']]]),
+      : [['npm', ['install', '-g', '--prefer-online', '@crafts69guy/orchestra@latest']]]),
     ...(hasOrchestra(io, 'claude')
       ? [
           ['claude', ['plugin', 'marketplace', 'update', 'orchestra']],
