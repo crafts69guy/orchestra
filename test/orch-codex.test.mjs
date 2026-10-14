@@ -39,6 +39,8 @@ function harness(overrides = {}) {
     readdir: (d) => Object.keys(AGENTS).filter(() => d.endsWith('agents')),
     hasCommand: () => true,
     gitDir: () => '/repo/.git',
+    exec: () => ({ status: 1, stdout: '' }),
+    exists: () => false,
     spawn: (args, env) => {
       out.spawned = { args, env };
       return { status: 0 };
@@ -80,9 +82,11 @@ test('buildArgs JSON-encodes developer_instructions and adds --add-dir only with
     '--add-dir',
     '/r/.git',
   ]);
-  assert.deepEqual(buildArgs({ context: 'c', agents: [], commonDir: null }), [
+  assert.deepEqual(buildArgs({ context: 'c', agents: [], commonDir: null, mcp: ['-c', 'm'] }), [
     '-c',
     'developer_instructions="c"',
+    '-c',
+    'm',
   ]);
 });
 
@@ -154,4 +158,14 @@ test('gitCommonDir returns the absolute common dir in a repo and null outside', 
   const dir = gitCommonDir(repo);
   assert.ok(dir?.endsWith('/.git'));
   assert.equal(gitCommonDir(join(tmp, 'nogit-does-not-exist')), null);
+});
+
+test('run injects the cocoindex-code server only when ccc is enabled', () => {
+  const indexed = { exec: () => ({ status: 0, stdout: '/repo\n' }), exists: () => true };
+  const on = harness(indexed);
+  run(on.deps);
+  assert.ok(on.out.spawned.args.includes('mcp_servers.cocoindex-code.command="ccc"'));
+  const off = harness({ ...indexed, env: { PATH: '/bin', ORCH_CCC: '0' } });
+  run(off.deps);
+  assert.ok(!off.out.spawned.args.some((a) => a.startsWith('mcp_servers.')));
 });

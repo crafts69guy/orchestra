@@ -42,6 +42,7 @@ function fakeIo(overrides = {}) {
       return io.spawnResult;
     },
     exists: () => true,
+    hasCommand: () => false,
     read: () => '{"version":"9.9.9"}',
     ...overrides,
   };
@@ -51,6 +52,46 @@ function fakeIo(overrides = {}) {
 test('splitYolo strips --yolo wherever it appears', () => {
   assert.deepEqual(splitYolo(['-p', '--yolo', 'hi']), { yolo: true, rest: ['-p', 'hi'] });
   assert.deepEqual(splitYolo(['hi']), { yolo: false, rest: ['hi'] });
+});
+
+test('claudeArgs puts the ccc --mcp-config= arg first', () => {
+  const args = claudeArgs(['hi'], true);
+  assert.match(args[0], /^--mcp-config=\{"mcpServers":\{"cocoindex-code"/);
+  assert.deepEqual(args.slice(1), ['--model', 'opus', 'hi']);
+});
+
+test('claude injects ccc when enabled', () => {
+  const io = fakeIo({
+    env: { PATH: '/bin' },
+    hasCommand: () => true,
+    exec: () => ({ status: 0, stdout: '/work\n' }),
+  });
+  run(['claude', 'hi'], io);
+  assert.match(io.spawned[0].args[0], /^--mcp-config=/);
+});
+
+test('ccc subcommand dispatches to ccc init', () => {
+  const io = fakeIo();
+  assert.equal(run(['ccc'], io), 1);
+  assert.match(io.err, /usage: orch ccc init/);
+});
+
+test('update upgrades cocoindex-code only when uv lists it', () => {
+  const uv =
+    (stdout, status = 0) =>
+    (cmd) =>
+      cmd === 'uv' ? { status, stdout } : { status: 127, stdout: '' };
+  const listed = fakeIo({ exists: () => true, exec: uv('cocoindex-code v0.4\n- ccc\n') });
+  run(['update'], listed);
+  assert.deepEqual(
+    listed.spawned.map((s) => [s.cmd, ...s.args].join(' ')),
+    ['uv tool upgrade cocoindex-code'],
+  );
+  for (const exec of [uv('ruff v1\n'), uv('cocoindex-code v0.4\n', 1)]) {
+    const io = fakeIo({ exists: () => true, exec });
+    run(['update'], io);
+    assert.equal(io.spawned.length, 0);
+  }
 });
 
 test('claudeArgs defaults to opus, keeps a user model, maps --yolo', () => {
@@ -94,6 +135,7 @@ test('codex runs the launcher; --yolo becomes the bypass flag right before the u
     read: readFileSync,
     readdir: () => [],
     hasCommand: () => true,
+    exec: () => ({ status: 1, stdout: '' }),
     gitDir: () => null,
     spawnResult: { status: 3 },
   });

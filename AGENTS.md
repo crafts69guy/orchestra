@@ -49,7 +49,8 @@ body (`developer_instructions`). `model` is not mapped, so Codex inherits the us
 ## CLI
 
 `bin/orch` is a thin shim; `scripts/orch.mjs` routes subcommands to `scripts/orch-wt.mjs`
-(`orch wt`), `scripts/orch-codex.mjs` (`orch codex`) and `scripts/doctor.mjs` (`orch doctor`),
+(`orch wt`), `scripts/orch-codex.mjs` (`orch codex`), `scripts/ccc.mjs` (`orch ccc`, plus the cocoindex-code
+MCP gate the launchers and the session hook share) and `scripts/doctor.mjs` (`orch doctor`),
 and runs `orch claude`, `orch update` and `orch eval` itself. Each module takes its process,
 filesystem and spawn dependencies as arguments. See [ADR-0005](docs/adr/0005-orch-cli.md).
 

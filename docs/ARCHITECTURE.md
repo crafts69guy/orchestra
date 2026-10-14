@@ -33,7 +33,7 @@ flowchart LR
   pony[["ponytail plugin<br/>YAGNI ruleset"]]
   wt["worktrunk (wt)"]
   git[(git repo<br/>+ worktrees)]
-  mcp["MCP servers<br/>cocoindex-code · context7"]
+  mcp["MCP servers<br/>cocoindex-code (injected) · context7"]
   gh["GitHub"]
 
   user -->|"orch claude / orch codex<br/>(ORCH=1)"| orch
@@ -44,6 +44,7 @@ flowchart LR
   orch -->|"spawn, brief, resume"| subs
   orch -->|"wt switch / merge"| wt --> git
   subs -->|"read / edit / test"| git
+  user -->|"launchers inject cocoindex-code<br/>when ccc is on PATH and the repo is indexed"| mcp
   subs -.->|"allowlisted tools"| mcp
   subs -->|"shipper only"| gh
 ```
@@ -100,6 +101,7 @@ orchestra/
 ├── bin/orch                     # CLI entry (npm bin): claude, codex, wt, doctor, update, eval
 ├── scripts/
 │   ├── orch.mjs                 # subcommand dispatcher, `orch claude`
+│   ├── ccc.mjs                  # `orch ccc init`, MCP injection gate (cocoindex-code)
 │   ├── orch-wt.mjs              # `orch wt`: worktrunk wrapper used by dispatch
 │   ├── orch-codex.mjs           # `orch codex`: rules, agents, sandbox dirs
 │   ├── doctor.mjs               # `orch doctor`: prerequisite checks
@@ -150,6 +152,7 @@ flowchart LR
   launcher -->|"ORCH=1"| codex["codex"]
   launcher -->|"-c developer_instructions=rules + orch path"| codex
   launcher -->|"-c agents.NAME.config_file / description"| codex
+  launcher -->|"-c mcp_servers.cocoindex-code.*<br/>(ccc on PATH, repo indexed)"| codex
   launcher -->|"--add-dir GIT_COMMON_DIR"| codex
 ```
 
@@ -166,19 +169,21 @@ flowchart LR
   disp -->|"claude [--yolo]"| claude["claude<br/>ORCH=1, --model opus"]
   disp -->|"codex [--yolo]"| ocx["scripts/orch-codex.mjs"] --> codex["codex"]
   disp -->|"wt new · merge · list"| owt["scripts/orch-wt.mjs"] --> wt["worktrunk + git"]
+  disp -->|"ccc init [--force]"| occ["scripts/ccc.mjs"] --> ccc["ccc init · index"]
   disp -->|"doctor"| doc["scripts/doctor.mjs"]
-  disp -->|"update"| upd["npm, claude plugin,<br/>codex plugin"]
+  disp -->|"update"| upd["npm, claude plugin,<br/>codex plugin, uv tool"]
   disp -->|"eval"| ev["evals/_support/run.sh<br/>(git checkout only)"]
   disp -->|"--help · --version"| pkg["usage, package.json"]
 ```
 
 | Command | Does |
 |---|---|
-| `orch claude [--yolo] [args]` | runs `claude` with `ORCH=1`; adds `--model opus` unless `--model` is given; `--yolo` → `--dangerously-skip-permissions` |
-| `orch codex [--yolo] [args]` | Codex launcher (§4); `--yolo` → `--dangerously-bypass-approvals-and-sandbox` |
+| `orch claude [--yolo] [args]` | runs `claude` with `ORCH=1`; adds `--model opus` unless `--model` is given; `--yolo` → `--dangerously-skip-permissions`; injects the `cocoindex-code` MCP server (`--mcp-config=`) when `ccc` is usable (§10) |
+| `orch codex [--yolo] [args]` | Codex launcher (§4); `--yolo` → `--dangerously-bypass-approvals-and-sandbox`; injects the `cocoindex-code` MCP server (`-c mcp_servers.…`) when `ccc` is usable |
+| `orch ccc init [--force]` | indexes the git root with `ccc` (refuses repos under 200 files without `--force`), ensures `max_file_size: 256KB`, runs `ccc index` ([ADR-0007](adr/0007-ccc-integration.md)) |
 | `orch wt new\|merge\|list` | worktree helper for dispatch (§8) |
-| `orch doctor` | checks node, git, `wt`, a harness and the installed plugins; exit 1 if a required check fails |
-| `orch update` | `npm i -g` the CLI (skipped in a git checkout), then updates the plugin for each harness that has the `orchestra` marketplace; runs every step, exits with the first failure |
+| `orch doctor` | checks node, git, `wt`, `ccc` (warning only), a harness and the installed plugins; exit 1 if a required check fails |
+| `orch update` | `npm i -g` the CLI (skipped in a git checkout), then updates the plugin for each harness that has the `orchestra` marketplace, then `uv tool upgrade cocoindex-code` when it is installed; runs every step, exits with the first failure |
 | `orch eval [args]` | behaviour evals; exits 1 when `evals/` is absent (npm install) |
 
 Exit codes pass through from the child (a signal becomes 1); a missing
@@ -369,6 +374,7 @@ critical rules instead of relying on hooks alone.
 | Session context | SessionStart `additionalContext` | same contract, hooks need trust | one `hooks.json` |
 | Worktree per subagent | `isolation: worktree` | none; sandbox blocks `.git` writes | worktrunk on both; Codex adds `--add-dir <repo>/.git` |
 | `agent_type` in hooks | `orch:<role>` | `<role>` | hooks strip the `<plugin>:` prefix |
+| MCP servers | `--mcp-config=<json>` per run | `-c mcp_servers.<n>.*` per run | launchers inject `cocoindex-code` when `ccc` is on `PATH` and the git root is indexed; `ORCH_CCC=0` disables |
 | Plugin dependencies | `dependencies` | none | ponytail declared on Claude, documented on Codex |
 
 ## 11. Quality strategy

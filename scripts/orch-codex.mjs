@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { basename, join } from 'node:path';
 import { buildContext, readRules } from '../hooks/session-start.mjs';
+import { cccEnabled, codexMcpArgs } from './ccc.mjs';
 
 const DESCRIPTION = /^description = ("(?:[^"\\]|\\.)*")$/m;
 
@@ -46,33 +47,47 @@ export function agentArgs(root, { read, readdir }) {
     });
 }
 
-/** Args prepended to the user's codex args; `commonDir` null skips `--add-dir` (P0 C2). */
-export function buildArgs({ context, agents, commonDir }) {
+/** Args prepended to the user's codex args (`mcp` are extra `-c` pairs); `commonDir` null skips `--add-dir` (P0 C2). */
+export function buildArgs({ context, agents, commonDir, mcp = [] }) {
   return [
     '-c',
     `developer_instructions=${JSON.stringify(context)}`,
     ...agents,
+    ...mcp,
     ...(commonDir ? ['--add-dir', commonDir] : []),
   ];
 }
 
 /** Returns the process exit code; never throws. */
-export function run({ argv, env, root, cwd, read, readdir, hasCommand, gitDir, spawn, stderr }) {
+export function run({
+  argv,
+  env,
+  root,
+  cwd,
+  read,
+  readdir,
+  hasCommand,
+  gitDir,
+  exec,
+  exists,
+  spawn,
+  stderr,
+}) {
   const rules = readRules(root, read);
   if (rules === null) {
     stderr(`orch codex: rules/orchestrator.md not found under ${root}\n`);
     return 1;
   }
-  const context = buildContext(
-    rules,
-    hasCommand('wt', env.PATH),
-    join(root, 'bin', 'orch'),
-    env.ORCH_DOCS !== '0',
-  );
+  const ccc = cccEnabled(env, cwd, { exec, exists, hasCommand });
+  const context = buildContext(rules, hasCommand('wt', env.PATH), join(root, 'bin', 'orch'), {
+    docs: env.ORCH_DOCS !== '0',
+    ccc,
+  });
   const prefix = buildArgs({
     context,
     agents: agentArgs(root, { read, readdir }),
     commonDir: gitDir(cwd),
+    mcp: ccc ? codexMcpArgs() : [],
   });
   const r = spawn([...prefix, ...argv], { ...env, ORCH: '1' });
   return spawnExit(r, 'codex', stderr, 'install Codex CLI first.');

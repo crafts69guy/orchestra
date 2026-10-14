@@ -13,6 +13,8 @@ The rules are always-on but opt-in: they are injected at session start only when
 - [worktrunk](https://worktrunk.dev) (`brew install worktrunk`) for parallel dispatch. The
   session hook warns when `wt` is missing.
 - Claude Code and/or Codex.
+- Optional: [cocoindex-code](https://github.com/cocoindex-io/cocoindex-code) (`uv tool install 'cocoindex-code[full]'`)
+  for semantic code search. orch never installs it.
 - Claude Code: the `ponytail` plugin is declared as a dependency. Add its marketplace first:
   `/plugin marketplace add DietrichGebert/ponytail`.
 
@@ -50,6 +52,7 @@ codex plugin add orch@orchestra
 | `orch claude [--yolo] [args...]` | starts `claude` with `ORCH=1` and `--model opus` (unless you pass `--model`) |
 | `orch codex [--yolo] [args...]` | starts `codex` with `ORCH=1` and the orchestration context (below) |
 | `orch update` | updates the npm CLI, then the plugin for each harness that has the `orchestra` marketplace (`claude plugin update orch@orchestra`, `codex plugin marketplace upgrade orchestra`); skips npm from a git checkout |
+| `orch ccc init [--force]` | indexes this repo with `ccc` for semantic search (repos under 200 files need `--force`) |
 | `orch wt new\|merge\|list ...` | worktree helper used by the `dispatch` skill; prints JSON |
 | `orch eval [args...]` | behaviour evals; only from a git checkout (see [AGENTS.md](AGENTS.md)) |
 | `orch --help`, `orch --version` | usage and version |
@@ -63,6 +66,10 @@ silently and the session is untouched.
 
 The handoff brief to `implementer` includes a Docs/JSDoc acceptance criterion (new or changed exports
 carry JSDoc, touched docs are updated). `ORCH_DOCS=0` turns it off; any other value keeps it on.
+
+When `ccc` is on `PATH` and the repo's git root is indexed (`orch ccc init`), `orch claude` and
+`orch codex` add the `cocoindex-code` MCP server for that run. `ORCH_CCC=0` turns it off; any other
+value keeps it on. A repo indexed mid-session needs a restart.
 
 ## Codex
 
