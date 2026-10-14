@@ -183,7 +183,7 @@ test('update runs npm, claude and codex steps; skips npm in a checkout and harne
   assert.deepEqual(
     io.spawned.map((s) => [s.cmd, ...s.args].join(' ')),
     [
-      'npm install -g @crafts69guy/orchestra@latest',
+      'npm install -g --prefer-online @crafts69guy/orchestra@latest',
       'claude plugin marketplace update orchestra',
       'claude plugin update orch@orchestra',
       'codex plugin marketplace upgrade orchestra',

@@ -44,8 +44,10 @@ find. The unscoped npm name `orchestra` is taken.
 Updating meant three commands in three tools (npm, `claude plugin`, `codex plugin`).
 `orch update` runs them in order:
 
-1. `npm install -g @crafts69guy/orchestra@latest`, skipped when the plugin root is a
-   git checkout (`npm link`); it prints a `git pull` hint instead.
+1. `npm install -g --prefer-online @crafts69guy/orchestra@latest`, skipped when the plugin root is a
+   git checkout (`npm link`); it prints a `git pull` hint instead. `--prefer-online`
+   revalidates cached registry metadata, so a just-published version is found: 0.7.0 failed
+   with `ETARGET` right after its publish (fixed in 0.7.1).
 2. `claude plugin marketplace update orchestra` and `claude plugin update orch@orchestra`,
    when `claude plugin marketplace list --json` names `orchestra`.
 3. `codex plugin marketplace upgrade orchestra`, when `codex plugin marketplace list --json`
