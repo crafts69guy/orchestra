@@ -49,6 +49,7 @@ codex plugin add orch@orchestra
 | Command | Does |
 |---|---|
 | `orch doctor` | checks Node, git, `wt`, the harness CLIs and the installed plugins |
+| `orch context [--scope user\|project\|all] [--json]` | audits what Claude Code and Codex load into context (memory, skills, agents, plugins, MCP): token estimates and findings |
 | `orch claude [--yolo] [args...]` | starts `claude` with `ORCH=1` and `--model opus` (unless you pass `--model`) |
 | `orch codex [--yolo] [args...]` | starts `codex` with `ORCH=1` and the orchestration context (below) |
 | `orch update` | updates the npm CLI, then the plugin for each harness that has the `orchestra` marketplace (`claude plugin update orch@orchestra`, `codex plugin marketplace upgrade orchestra`); skips npm from a git checkout |

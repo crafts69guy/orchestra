@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pluginRoot, which } from '../hooks/session-start.mjs';
 import { run as ccc, cccEnabled, claudeMcpArg } from './ccc.mjs';
+import { run as context } from './context.mjs';
 import { run as doctor } from './doctor.mjs';
 import { run as codex, gitCommonDir, spawnExit } from './orch-codex.mjs';
 import { exec, run as wt, realDeps as wtDeps } from './orch-wt.mjs';
@@ -15,6 +16,7 @@ commands:
   wt new|merge|list ...    manage task worktrees (prints JSON)
   ccc init [--force]       index this repo for semantic search (cocoindex-code)
   doctor                   check prerequisites
+  context [--scope ...] [--json]   audit what Claude/Codex load into context
   update                   update the npm CLI and the installed Claude/Codex plugins
   eval [args]              run the behaviour evals (git checkout only)
   help, -h, --help         show this help
@@ -114,6 +116,12 @@ export const commands = {
     io.stdout(`${lines.join('\n')}\n`);
     return code;
   },
+  context(args, io) {
+    const { code, out, err } = context(args, io);
+    if (out) io.stdout(out);
+    if (err) io.stderr(err);
+    return code;
+  },
   /** Runs every step even after a failure; returns the first non-zero code. */
   update(_args, io) {
     if (io.exists(join(io.root, '.git'))) {
@@ -177,5 +185,10 @@ export function realIo(proc, metaUrl) {
 }
 
 export function main(proc = process, metaUrl = import.meta.url) {
+  // A reader that closed early (`orch context --json | head`) ends the output, not the process.
+  proc.stdout.on('error', (e) => {
+    if (e.code !== 'EPIPE') throw e;
+    proc.exit(proc.exitCode);
+  });
   proc.exitCode = run(proc.argv.slice(2), realIo(proc, metaUrl));
 }
