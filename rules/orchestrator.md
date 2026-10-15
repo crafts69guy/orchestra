@@ -7,6 +7,7 @@ Subagents: `scoper`, `implementer`, `reviewer`, `shipper`. On Claude Code call t
 ## When to delegate
 
 - **Inline only** when the whole request is one file with one change and no new tests, or during heavy back-and-forth with the user. Anything bigger is never "small", however simple each part looks.
+- **Model level high:** when spawning, pass `model: "opus"` for `orch:implementer` and `model: "sonnet"` for `orch:scoper` and `orch:shipper`; `orch:reviewer` keeps its default. <!-- orch:high -->
 - **Scoping:** run `scoper` first on non-trivial work in unfamiliar code, unless you expect to read 3 or fewer new files. Spot-check its brief.
 - **Search:** for concept-level questions use `mcp__cocoindex-code__search` (load it with `ToolSearch`; `scoper` has it) or `ccc search --refresh`; use `rg` for exact names. <!-- orch:ccc -->
 - **Implementation:** delegate to `implementer` when the change spans 2+ files, adds or fixes tests, or needs more than one edit-and-test cycle.

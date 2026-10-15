@@ -11,7 +11,7 @@ import { exec, run as wt, realDeps as wtDeps } from './orch-wt.mjs';
 export const USAGE = `usage: orch <command> [args]
 
 commands:
-  claude [--yolo] [args]   run claude with the orch workflow (ORCH=1, --model opus by default)
+  claude [--yolo] [--level high] [args]   run claude with the orch workflow (ORCH=1, --model opus by default)
   codex [--yolo] [args]    run codex with the orch workflow
   wt new|merge|list ...    manage task worktrees (prints JSON)
   ccc init [--force]       index this repo for semantic search (cocoindex-code)
@@ -23,11 +23,27 @@ commands:
   -V, --version            print the version
 
 --yolo bypasses the harness's permission prompts and sandbox; never the default.
+--level high runs implementer on opus, scoper and shipper on sonnet (default: agent defaults).
 `;
 
 /** Splits orch's own `--yolo` flag out of the args passed through to the harness. */
 export function splitYolo(args) {
   return { yolo: args.includes('--yolo'), rest: args.filter((a) => a !== '--yolo') };
+}
+
+/**
+ * Splits orch's `--level <v>` / `--level=<v>` out of the args. `level` is undefined when absent and
+ * '' when the flag has no value; the last occurrence wins.
+ */
+export function splitLevel(args) {
+  let level;
+  const rest = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--level') level = args[++i] ?? '';
+    else if (args[i].startsWith('--level=')) level = args[i].slice('--level='.length);
+    else rest.push(args[i]);
+  }
+  return { level, rest };
 }
 
 /** Args for `claude`; `ccc` puts the cocoindex-code `--mcp-config=` first. */
@@ -88,15 +104,21 @@ export function updateSteps(io) {
 
 /** Each command takes `(args, io)` and returns the exit code. */
 export const commands = {
-  claude: (args, io) =>
-    spawnExit(
-      io.spawn('claude', claudeArgs(args, cccEnabled(io.env, io.cwd, io)), {
-        env: { ...io.env, ORCH: '1' },
+  claude(args, io) {
+    const { level, rest } = splitLevel(args);
+    if (level !== undefined && level !== 'default' && level !== 'high') {
+      io.stderr(`orch: unknown level ${level} (default|high)\n`);
+      return 1;
+    }
+    return spawnExit(
+      io.spawn('claude', claudeArgs(rest, cccEnabled(io.env, io.cwd, io)), {
+        env: { ...io.env, ORCH: '1', ...(level === undefined ? {} : { ORCH_LEVEL: level }) },
       }),
       'claude',
       io.stderr,
       'install Claude Code first.',
-    ),
+    );
+  },
   codex(args, io) {
     const { yolo, rest } = splitYolo(args);
     return codex({

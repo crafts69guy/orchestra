@@ -225,6 +225,21 @@ test('run drops docs lines only when ORCH_DOCS=0', () => {
   assert.doesNotMatch(ctx('0'), /\nb\b/);
 });
 
+test('run keeps high lines only when ORCH_LEVEL=high', () => {
+  const ctx = (level) => {
+    const { deps, out } = harness({
+      root: fixtureRoot(`high-${level}`, 'a\nb <!-- orch:high -->\n'),
+      read: readFileSync,
+    });
+    deps.env.ORCH_LEVEL = level;
+    run(deps);
+    return JSON.parse(out.stdout).hookSpecificOutput.additionalContext;
+  };
+  assert.match(ctx('high'), /\nb\n/);
+  assert.doesNotMatch(ctx(undefined), /\nb\b/);
+  assert.doesNotMatch(ctx('default'), /\nb\b/);
+});
+
 test('applyMarkers drops a line when its flag is falsy and strips the marker otherwise', () => {
   const rules = 'a\nb <!-- orch:ccc -->\nc <!-- orch:docs -->\n';
   assert.equal(applyMarkers(rules, { ccc: true, docs: false }), 'a\nb\n');

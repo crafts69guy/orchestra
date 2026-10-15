@@ -46,7 +46,12 @@ export function applyMarkers(rules, flags) {
 }
 
 /** `orchPath` is the absolute `bin/orch`; plugin bin/ is not on PATH under Codex, so name it. */
-export function buildContext(rules, hasWt, orchPath, flags = { docs: true, ccc: false }) {
+export function buildContext(
+  rules,
+  hasWt,
+  orchPath,
+  flags = { docs: true, ccc: false, high: false },
+) {
   const withCli = `${applyMarkers(rules, flags).trimEnd()}\n\norch CLI: ${orchPath} (use \`${orchPath} wt new|merge|list\`)\n`;
   return hasWt ? withCli : `${withCli}\n${WT_WARNING}\n`;
 }
@@ -69,6 +74,7 @@ export function run({ env, root, cwd, read, hasCommand, exec, exists, stdout, st
     formatOutput(
       buildContext(rules, hasCommand('wt', env.PATH), join(root, 'bin', 'orch'), {
         docs: env.ORCH_DOCS !== '0',
+        high: env.ORCH_LEVEL === 'high',
         ccc: cccEnabled(env, cwd, { exec, exists, hasCommand }),
       }),
     ),

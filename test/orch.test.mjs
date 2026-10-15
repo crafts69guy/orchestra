@@ -11,6 +11,7 @@ import {
   hasOrchestra,
   main,
   run,
+  splitLevel,
   splitYolo,
   USAGE,
 } from '../scripts/orch.mjs';
@@ -108,6 +109,35 @@ test('claude spawns with ORCH=1, never bypasses permissions by default, propagat
   assert.equal(cmd, 'claude');
   assert.deepEqual(args, ['--model', 'opus', 'hi']);
   assert.deepEqual(opts.env, { PATH: '/bin', ORCH: '1' });
+});
+
+test('splitLevel strips --level in both forms', () => {
+  assert.deepEqual(splitLevel(['-p', '--level', 'high', 'hi']), {
+    level: 'high',
+    rest: ['-p', 'hi'],
+  });
+  assert.deepEqual(splitLevel(['--level=default', 'hi']), { level: 'default', rest: ['hi'] });
+  assert.deepEqual(splitLevel(['hi']), { level: undefined, rest: ['hi'] });
+  assert.deepEqual(splitLevel(['--level']), { level: '', rest: [] });
+});
+
+test('claude --level sets ORCH_LEVEL and stays out of argv; no flag leaves env alone', () => {
+  const io = fakeIo();
+  assert.equal(run(['claude', '--level', 'high', 'hi'], io), 0);
+  assert.deepEqual(io.spawned[0].args, ['--model', 'opus', 'hi']);
+  assert.equal(io.spawned[0].opts.env.ORCH_LEVEL, 'high');
+  const plain = fakeIo();
+  run(['claude'], plain);
+  assert.equal('ORCH_LEVEL' in plain.spawned[0].opts.env, false);
+});
+
+test('claude --level rejects unknown or missing values without spawning', () => {
+  for (const a of [['--level', 'max'], ['--level=x'], ['--level']]) {
+    const io = fakeIo();
+    assert.equal(run(['claude', ...a], io), 1);
+    assert.match(io.err, /orch: unknown level \S* \(default\|high\)/);
+    assert.equal(io.spawned.length, 0);
+  }
 });
 
 test('claude: missing binary exits 127 with a hint, a signal exits 1', () => {
