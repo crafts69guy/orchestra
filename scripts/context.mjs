@@ -130,6 +130,7 @@ export function collect(io, root) {
       always: 0,
       listing: 0,
       body: 0,
+      manual: false,
       ...size,
       description,
     });
@@ -142,13 +143,22 @@ export function collect(io, root) {
     const description = descriptionOf(t, data);
     const name = data.name || fallback;
     const body = fm ? fm.body : t;
+    // Manual-only skills are never listed to the model: Claude's frontmatter flag, Codex's
+    // `agents/openai.yaml` policy.
+    const manual =
+      harness === 'claude'
+        ? data['disable-model-invocation'] === 'true'
+        : kind === 'skill' &&
+          /^\s*allow_implicit_invocation:\s*false\b/m.test(
+            text(join(dirname(p), 'agents', 'openai.yaml'), scope) ?? '',
+          );
     push(
       scope,
       origin,
       kind,
       name,
       p,
-      { listing: name.length + description.length, body: body.length },
+      { listing: manual ? 0 : name.length + description.length, body: body.length, manual },
       description,
     );
     if (kind === 'skill' && t.split('\n').length > DOC_BODY_LINES) {
@@ -317,7 +327,7 @@ export function collect(io, root) {
   }
   skills(join(xdir, 'skills'), 'user', 'user');
   skills(join(home, '.agents', 'skills'), 'user', 'user');
-  skills(join(root, '.agents', 'skills'), 'project', 'project');
+  if (root !== home) skills(join(root, '.agents', 'skills'), 'project', 'project');
   for (const [header, kv] of cfg.sections) {
     const plugin = /^plugins\.(.+)@([^@]+)$/.exec(header);
     if (plugin && kv.enabled !== 'false') {
@@ -354,14 +364,16 @@ export function analyze({ sources, findings }, { scope = 'all' } = {}) {
     const own = kept.filter((s) => s.harness === harness);
     if (!own.length && !findings.some((f) => f.harness === harness)) continue;
     const add = (f) => out.push({ ...f, harness });
-    const count = (kind) => own.filter((s) => s.kind === kind).length;
+    const count = (kind) => own.filter((s) => s.kind === kind && !s.manual).length;
+    const manual = own.filter((s) => s.manual).length;
     const always = own.reduce((n, s) => n + s.always, 0);
     const listing = own.reduce((n, s) => n + s.listing, 0);
     const heavy = tokens(always) > ALWAYS_WARN_TOKENS || tokens(listing) > LISTING_WARN_TOKENS;
     const detail =
       `always-loaded ${fmtTokens(always)} tokens (${count('memory')} files), ` +
       `listing ${fmtTokens(listing)} tokens (${count('skill')} skills, ${count('agent')} agents, ` +
-      `${count('command')} commands), ${count('mcp')} MCP servers, ` +
+      `${count('command')} commands${manual ? `; ${manual} manual-only, not listed` : ''}), ` +
+      `${count('mcp')} MCP servers, ` +
       `${count('hook')} SessionStart hooks (not measured)`;
     add(
       heavy
@@ -375,7 +387,8 @@ export function analyze({ sources, findings }, { scope = 'all' } = {}) {
       .slice(0, 5)) {
       add(info('top', `${fmtTokens(size(s))}  ${s.kind} ${s.name} (${s.origin})`));
     }
-    const docs = own.filter((s) => ['skill', 'agent', 'command'].includes(s.kind));
+    // Manual-only entries cost no listing and cannot mis-trigger, so description checks skip them.
+    const docs = own.filter((s) => ['skill', 'agent', 'command'].includes(s.kind) && !s.manual);
     // Plugin descriptions are not the user's to edit: one line per plugin, not per skill.
     const pluginLong = new Map();
     for (const s of docs) {
