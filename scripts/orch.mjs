@@ -6,14 +6,16 @@ import { run as ccc, cccEnabled, claudeMcpArg } from './ccc.mjs';
 import { run as context } from './context.mjs';
 import { run as doctor } from './doctor.mjs';
 import { run as codex, gitCommonDir, spawnExit } from './orch-codex.mjs';
+import { run as pane } from './orch-pane.mjs';
 import { exec, run as wt, realDeps as wtDeps } from './orch-wt.mjs';
 
 export const USAGE = `usage: orch <command> [args]
 
 commands:
-  claude [--yolo] [--level high] [args]   run claude with the orch workflow (ORCH=1, --model opus by default)
+  claude [--yolo] [--level high] [--panes] [args]   run claude with the orch workflow (ORCH=1, --model opus by default)
   codex [--yolo] [args]    run codex with the orch workflow
   wt new|merge|list ...    manage task worktrees (prints JSON)
+  pane start|wait|prompt|close ...   drive herdr pane workers (prints JSON; inside herdr only)
   ccc init [--force]       index this repo for semantic search (cocoindex-code)
   doctor                   check prerequisites
   context [--scope ...] [--json]   audit what Claude/Codex load into context
@@ -24,11 +26,17 @@ commands:
 
 --yolo bypasses the harness's permission prompts and sandbox; never the default.
 --level high runs implementer on opus, scoper and shipper on sonnet (default: agent defaults).
+--panes runs dispatch's implementers as herdr pane workers (ORCH_PANES=1; needs herdr).
 `;
 
 /** Splits orch's own `--yolo` flag out of the args passed through to the harness. */
 export function splitYolo(args) {
   return { yolo: args.includes('--yolo'), rest: args.filter((a) => a !== '--yolo') };
+}
+
+/** Splits orch's own `--panes` flag out of the args passed through to the harness. */
+export function splitPanes(args) {
+  return { panes: args.includes('--panes'), rest: args.filter((a) => a !== '--panes') };
 }
 
 /**
@@ -105,14 +113,20 @@ export function updateSteps(io) {
 /** Each command takes `(args, io)` and returns the exit code. */
 export const commands = {
   claude(args, io) {
-    const { level, rest } = splitLevel(args);
+    const { level, rest: afterLevel } = splitLevel(args);
+    const { panes, rest } = splitPanes(afterLevel);
     if (level !== undefined && level !== 'default' && level !== 'high') {
       io.stderr(`orch: unknown level ${level} (default|high)\n`);
       return 1;
     }
     return spawnExit(
       io.spawn('claude', claudeArgs(rest, cccEnabled(io.env, io.cwd, io)), {
-        env: { ...io.env, ORCH: '1', ...(level === undefined ? {} : { ORCH_LEVEL: level }) },
+        env: {
+          ...io.env,
+          ORCH: '1',
+          ...(level === undefined ? {} : { ORCH_LEVEL: level }),
+          ...(panes ? { ORCH_PANES: '1' } : {}),
+        },
       }),
       'claude',
       io.stderr,
@@ -130,6 +144,18 @@ export const commands = {
   ccc: (args, io) => ccc(args, { ...io, spawnExit }),
   wt(args, io) {
     const { code, result } = wt(args, io.wtDeps, io.cwd);
+    io.stdout(`${JSON.stringify(result)}\n`);
+    return code;
+  },
+  pane(args, io) {
+    const deps = {
+      exec: io.exec,
+      readFile: (p) => io.read(p, 'utf8'),
+      env: io.env,
+      hasCommand: io.hasCommand,
+      root: io.root,
+    };
+    const { code, result } = pane(args, deps, io.cwd);
     io.stdout(`${JSON.stringify(result)}\n`);
     return code;
   },

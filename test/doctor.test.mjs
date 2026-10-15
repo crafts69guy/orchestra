@@ -33,6 +33,7 @@ test('all checks pass', () => {
       '✓ git  git version 2.55.0',
       '✓ wt  wt v0.80.0',
       '✓ ccc  ccc 0.4.0',
+      '· herdr  not in herdr (pane mode off)',
       '✓ claude  2.1.0 (Claude Code)',
       '✓ orch@orchestra  enabled (0.2.0, user)',
       '✓ ponytail@ponytail  enabled (0.2.0, user)',
@@ -68,7 +69,7 @@ test('a missing harness is a warning while the other one exists', () => {
 
   const noClaude = run(deps({ 'claude --version': undefined }));
   assert.equal(noClaude.code, 0);
-  assert.match(noClaude.lines[4], /^! claude .* — fix: install Claude Code$/);
+  assert.match(noClaude.lines[5], /^! claude .* — fix: install Claude Code$/);
   assert.ok(!noClaude.lines.some((l) => l.includes('orch@orchestra')), 'plugins skipped');
 });
 
@@ -92,10 +93,10 @@ test('orch missing fails, ponytail missing only warns', () => {
   const r = run(deps({ 'claude plugin list --json': ok('[]') }));
   assert.equal(r.code, 1);
   assert.match(
-    r.lines[5],
+    r.lines[6],
     /^✗ orch@orchestra {2}not installed or not enabled — fix: claude plugin marketplace add crafts69guy\/orchestra/,
   );
-  assert.match(r.lines[6], /^! ponytail@ponytail /);
+  assert.match(r.lines[7], /^! ponytail@ponytail /);
 });
 
 test('unusable plugin list output becomes a failed orch check', () => {
@@ -143,4 +144,13 @@ test('a missing ccc only warns', () => {
       (l) => l.startsWith('! ccc') && l.includes("uv tool install 'cocoindex-code[full]'"),
     ),
   );
+});
+
+test('herdr is optional: checked inside herdr, never fails doctor', () => {
+  const inside = { ...deps({ 'herdr --version': ok('herdr 0.9.4\n') }), env: { HERDR_ENV: '1' } };
+  assert.equal(run(inside).lines[4], '✓ herdr  herdr 0.9.4');
+  const broken = run({ ...deps(), env: { HERDR_ENV: '1' } });
+  assert.equal(broken.code, 0);
+  assert.match(broken.lines[4], /^! herdr {2}spawnSync x ENOENT — fix: see https:\/\/herdr\.dev$/);
+  assert.equal(run({ ...deps(), env: {} }).lines[4], '· herdr  not in herdr (pane mode off)');
 });

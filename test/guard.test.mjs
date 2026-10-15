@@ -142,3 +142,22 @@ test('script entrypoint reads stdin end to end', () => {
   assert.equal(off.status, 0);
   assert.equal(off.stdout, '');
 });
+
+test('run falls back to ORCH_ROLE (herdr pane workers) when agent_type is empty', () => {
+  const pane = { ORCH: '1', ORCH_ROLE: 'implementer' };
+  assert.match(call(pane, bash('git commit -m x')).stdout, /implementer role must not commit/);
+  assert.match(call(pane, bash('git commit -m x', '')).stdout, /implementer role must not commit/);
+  assert.deepEqual(call(pane, bash('git commit -m x', 'orch:shipper')), { code: 0, stdout: '' });
+  assert.deepEqual(call({ ORCH: '1', ORCH_ROLE: '' }, bash('git commit -m x')), {
+    code: 0,
+    stdout: '',
+  });
+});
+
+test('run ignores an ORCH_ROLE that would widen permissions', () => {
+  const shipper = { ORCH: '1', ORCH_ROLE: 'shipper' };
+  assert.match(
+    call(shipper, bash('git push')).stdout,
+    /only the shipper role may push.*role: main/,
+  );
+});

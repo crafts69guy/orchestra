@@ -24,14 +24,20 @@ const git = (deps, cwd, ...args) => deps.exec('git', args, cwd);
 const fail = (task, stderr) => ({ code: 1, result: { status: 'error', task, stderr } });
 const lines = (s) => s.split('\n').filter(Boolean);
 
-/** Keep `.worktrees/` out of `git status` without touching tracked files. */
+/** Pane workers write `<worktree>/.orch/report.md`; ignored so it never lands in a merge commit. */
+export const REPORT_DIR = '.orch';
+
+/** Keep `.worktrees/` and `.orch/` out of `git status` without touching tracked files. */
 export function ensureIgnored(deps, cwd) {
-  if (git(deps, cwd, 'check-ignore', '-q', `${WORKTREE_DIR}/x`).status === 0) return null;
+  const missing = [WORKTREE_DIR, REPORT_DIR].filter(
+    (dir) => git(deps, cwd, 'check-ignore', '-q', `${dir}/x`).status !== 0,
+  );
+  if (missing.length === 0) return null;
   const common = git(deps, cwd, 'rev-parse', '--git-common-dir');
   if (common.status !== 0) return common.stderr;
   const info = resolve(cwd, common.stdout.trim(), 'info');
   deps.mkdir(info);
-  deps.append(resolve(info, 'exclude'), `${WORKTREE_DIR}/\n`);
+  deps.append(resolve(info, 'exclude'), missing.map((dir) => `${dir}/\n`).join(''));
   return null;
 }
 

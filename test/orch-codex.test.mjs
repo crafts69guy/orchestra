@@ -169,3 +169,18 @@ test('run injects the cocoindex-code server only when ccc is enabled', () => {
   run(off.deps);
   assert.ok(!off.out.spawned.args.some((a) => a.startsWith('mcp_servers.')));
 });
+
+test('run sets the panes flag only with ORCH_PANES=1 inside herdr', () => {
+  const instructions = (env) => {
+    const { deps, out } = harness({
+      root: fixtureRoot(`panes-${Object.keys(env).length}`, 'a\nb <!-- orch:panes -->\n'),
+      env: { PATH: '/bin', ...env },
+    });
+    run(deps);
+    return JSON.parse(out.spawned.args[1].slice('developer_instructions='.length));
+  };
+  const on = instructions({ ORCH_PANES: '1', HERDR_ENV: '1' });
+  assert.match(on, /\nb\n/);
+  assert.match(on, /pane start\|wait\|prompt\|close/);
+  assert.doesNotMatch(instructions({ ORCH_PANES: '1' }), /pane start/);
+});

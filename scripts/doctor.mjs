@@ -1,4 +1,4 @@
-import { fail, format, pass, warn } from './lib/report.mjs';
+import { fail, format, info, pass, warn } from './lib/report.mjs';
 import { exec } from './orch-wt.mjs';
 
 const MIN_NODE = [22, 8];
@@ -60,6 +60,10 @@ export function run(deps = realDeps) {
     checkTool(deps, 'git', ['--version'], 'install git'),
     checkTool(deps, 'wt', ['--version'], 'brew install worktrunk'),
     checkTool(deps, 'ccc', ['version'], "uv tool install 'cocoindex-code[full]'", warn),
+    // optional: only pane mode (`orch claude --panes`) needs herdr
+    deps.env?.HERDR_ENV === '1'
+      ? checkTool(deps, 'herdr', ['--version'], 'see https://herdr.dev', warn)
+      : info('herdr', 'not in herdr (pane mode off)'),
   ];
   const claude = checkTool(deps, 'claude', ['--version'], 'install Claude Code', warn);
   checks.push(claude);
@@ -75,4 +79,4 @@ export function run(deps = realDeps) {
   };
 }
 
-export const realDeps = { exec, nodeVersion: process.versions.node };
+export const realDeps = { exec, env: process.env, nodeVersion: process.versions.node };

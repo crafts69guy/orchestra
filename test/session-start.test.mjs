@@ -262,3 +262,32 @@ test('run keeps ccc lines only when ccc is enabled for the git root', () => {
   assert.match(ctx(true), /\nb\n/);
   assert.doesNotMatch(ctx(false), /\nb\b/);
 });
+
+test('run is silent for a herdr pane worker (ORCH_ROLE set)', () => {
+  const { deps, out } = harness({ env: { ORCH: '1', ORCH_ROLE: 'implementer', PATH: '/bin' } });
+  assert.equal(run(deps), 0);
+  assert.deepEqual(out, { stdout: '', stderr: '' });
+});
+
+test('run keeps panes lines and names orch pane only with ORCH_PANES=1 inside herdr', () => {
+  const ctx = (env) => {
+    const { deps, out } = harness({
+      root: fixtureRoot('panes', 'a\nb <!-- orch:panes -->\n'),
+      read: readFileSync,
+    });
+    Object.assign(deps.env, env);
+    run(deps);
+    return JSON.parse(out.stdout).hookSpecificOutput.additionalContext;
+  };
+  const on = ctx({ ORCH_PANES: '1', HERDR_ENV: '1' });
+  assert.match(on, /\nb\n/);
+  assert.match(
+    on,
+    /bin\/orch wt new\|merge\|list` and `\S+bin\/orch pane start\|wait\|prompt\|close`\)/,
+  );
+  for (const env of [{ ORCH_PANES: '1' }, { HERDR_ENV: '1' }]) {
+    const off = ctx(env);
+    assert.doesNotMatch(off, /\nb\b/);
+    assert.doesNotMatch(off, /orch pane/);
+  }
+});

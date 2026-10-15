@@ -50,11 +50,12 @@ codex plugin add orch@orchestra
 |---|---|
 | `orch doctor` | checks Node, git, `wt`, the harness CLIs and the installed plugins |
 | `orch context [--scope user\|project\|all] [--json]` | audits what Claude Code and Codex load into context (memory, skills, agents, plugins, MCP): token estimates and findings |
-| `orch claude [--yolo] [--level high] [args...]` | starts `claude` with `ORCH=1` and `--model opus` (unless you pass `--model`) |
+| `orch claude [--yolo] [--level high] [--panes] [args...]` | starts `claude` with `ORCH=1` and `--model opus` (unless you pass `--model`) |
 | `orch codex [--yolo] [args...]` | starts `codex` with `ORCH=1` and the orchestration context (below) |
 | `orch update` | updates the npm CLI, then the plugin for each harness that has the `orchestra` marketplace (`claude plugin update orch@orchestra`, `codex plugin marketplace upgrade orchestra`); skips npm from a git checkout |
 | `orch ccc init [--force]` | indexes this repo with `ccc` for semantic search (repos under 200 files need `--force`) |
 | `orch wt new\|merge\|list ...` | worktree helper used by the `dispatch` skill; prints JSON |
+| `orch pane start\|wait\|prompt\|close ...` | herdr pane workers for the `dispatch` skill (pane mode, below); prints JSON |
 | `orch eval [args...]` | behaviour evals; only from a git checkout (see [AGENTS.md](AGENTS.md)) |
 | `orch --help`, `orch --version` | usage and version |
 
@@ -75,6 +76,12 @@ value keeps it on. A repo indexed mid-session needs a restart.
 `orch claude --level high` (or `ORCH_LEVEL=high`) raises the subagent models for that session, Claude
 Code only: `implementer` runs on opus, `scoper` and `shipper` on sonnet, `reviewer` is unchanged, and
 so is the orchestrator's own model. `--level default` (or no flag) keeps the agents' own models.
+
+`orch claude --panes` (or `ORCH_PANES=1`) turns on pane mode when the session runs inside
+[herdr](https://herdr.dev) (`HERDR_ENV=1`): `dispatch` runs each implementer as a real `claude` or
+`codex` session in a herdr pane of an `orch:<feature>` tab, inside its worktree, so you can watch
+and step into each one. Workers write their report to `<worktree>/.orch/report.md` (git-excluded).
+Outside herdr the flag has no effect. See [ADR-0009](docs/adr/0009-herdr-pane-workers.md).
 
 ## Codex
 

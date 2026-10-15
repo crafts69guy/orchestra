@@ -82,6 +82,7 @@ export function run({
   const context = buildContext(rules, hasCommand('wt', env.PATH), join(root, 'bin', 'orch'), {
     docs: env.ORCH_DOCS !== '0',
     ccc,
+    panes: env.ORCH_PANES === '1' && env.HERDR_ENV === '1',
   });
   const prefix = buildArgs({
     context,

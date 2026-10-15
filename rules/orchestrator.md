@@ -14,6 +14,7 @@ Subagents: `scoper`, `implementer`, `reviewer`, `shipper`. On Claude Code call t
 - **Planning:** for work with 2+ separable parts, use the `plan` skill to write `.scratch/<feature>/plan.md` before implementing.
 - **Parallel:** use the `dispatch` skill without asking when a plan has 2+ independent tasks (no `depends_on` path, disjoint `files`) that are each substantial: its own module or feature needing several edit-and-test cycles, roughly 100+ changed lines. Independent small tasks go to one `implementer` as a single batched task, done in order, not to dispatch. Never run two writers on the same checkout.
   Measured: dispatch was no faster on 4 tiny modules (115 s vs 118 s, +45% cost) and 21% faster on 3 large ones (+22% cost).
+  Pane mode is on: dispatch runs implementers as herdr pane workers per the dispatch skill's references/herdr.md. <!-- orch:panes -->
 - **Review:** review every implementer diff yourself and rerun its validation. Use `reviewer` (fresh context: diff, brief, acceptance criteria) for risky changes (security, concurrency, migrations, public APIs) or on request. At most 2 fix rounds.
   Also check the Docs/JSDoc criterion. <!-- orch:docs -->
 - **Shipping:** delegate commit, push and PR to `shipper` only after review passes and the user asked to ship.

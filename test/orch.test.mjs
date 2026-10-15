@@ -12,6 +12,7 @@ import {
   main,
   run,
   splitLevel,
+  splitPanes,
   splitYolo,
   USAGE,
 } from '../scripts/orch.mjs';
@@ -362,4 +363,48 @@ test('context prints the audit and returns its code; usage goes to stderr', () =
   const bad = fakeIo();
   assert.equal(run(['context', '--bogus'], bad), 1);
   assert.match(bad.err, /usage: orch context/);
+});
+
+test('splitPanes strips --panes; claude --panes sets ORCH_PANES and stays out of argv', () => {
+  assert.deepEqual(splitPanes(['-p', '--panes', 'hi']), { panes: true, rest: ['-p', 'hi'] });
+  assert.deepEqual(splitPanes(['hi']), { panes: false, rest: ['hi'] });
+  const io = fakeIo();
+  assert.equal(run(['claude', '--panes', '--level', 'high', 'hi'], io), 0);
+  assert.deepEqual(io.spawned[0].args, ['--model', 'opus', 'hi']);
+  assert.equal(io.spawned[0].opts.env.ORCH_PANES, '1');
+  const plain = fakeIo();
+  run(['claude'], plain);
+  assert.equal('ORCH_PANES' in plain.spawned[0].opts.env, false);
+});
+
+test('pane prints the JSON result and returns its code', () => {
+  const gated = fakeIo();
+  assert.equal(run(['pane', 'close', 'T'], gated), 1);
+  assert.match(JSON.parse(gated.out).stderr, /pane mode needs herdr/);
+
+  const calls = [];
+  const io = fakeIo({
+    env: { HERDR_ENV: '1', HERDR_WORKSPACE_ID: 'w1', PATH: '/bin' },
+    hasCommand: (name) => name === 'herdr',
+    exec: (cmd, args) => {
+      calls.push([cmd, ...args].join(' '));
+      return {
+        status: 0,
+        stdout: '{"result":{"type":"agent_info","agent":{"agent_status":"idle"}}}',
+        stderr: '',
+      };
+    },
+    read: (p, enc) => {
+      assert.equal(enc, 'utf8');
+      return `Status: done\nValidation\n- ok (${p})`;
+    },
+  });
+  assert.equal(run(['pane', 'wait', 'T', '--path', 'wt'], io), 0);
+  assert.deepEqual(JSON.parse(io.out), {
+    task: 'T',
+    state: 'idle',
+    report: '/work/wt/.orch/report.md',
+    evidence: true,
+  });
+  assert.deepEqual(calls, ['herdr agent wait orch-t', 'herdr agent get orch-t']);
 });

@@ -49,11 +49,13 @@ body (`developer_instructions`). `model` is not mapped, so Codex inherits the us
 ## CLI
 
 `bin/orch` is a thin shim; `scripts/orch.mjs` routes subcommands to `scripts/orch-wt.mjs`
-(`orch wt`), `scripts/orch-codex.mjs` (`orch codex`), `scripts/ccc.mjs` (`orch ccc`, plus the
-cocoindex-code MCP gate the launchers and the session hook share), `scripts/doctor.mjs`
-(`orch doctor`) and `scripts/context.mjs` (`orch context`; it shares `scripts/lib/report.mjs`
-with doctor), and runs `orch claude`, `orch update` and `orch eval` itself. Each module takes its
-process, filesystem and spawn dependencies as arguments. See [ADR-0005](docs/adr/0005-orch-cli.md).
+(`orch wt`), `scripts/orch-pane.mjs` (`orch pane`, herdr pane workers; gated on `HERDR_ENV=1`,
+see [ADR-0009](docs/adr/0009-herdr-pane-workers.md)), `scripts/orch-codex.mjs` (`orch codex`),
+`scripts/ccc.mjs` (`orch ccc`, plus the cocoindex-code MCP gate the launchers and the session hook
+share), `scripts/doctor.mjs` (`orch doctor`) and `scripts/context.mjs` (`orch context`; it shares
+`scripts/lib/report.mjs` with doctor), and runs `orch claude`, `orch update` and `orch eval` itself.
+Each module takes its process, filesystem and spawn dependencies as arguments. See
+[ADR-0005](docs/adr/0005-orch-cli.md).
 
 ## Codex launcher
 

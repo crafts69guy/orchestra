@@ -67,7 +67,17 @@ test('ensureIgnored appends to the common-dir info/exclude otherwise', () => {
   const deps = fake({ 'git check-ignore': bad('', 1), 'git rev-parse': ok('.git\n') });
   assert.equal(ensureIgnored(deps, '/r'), null);
   assert.deepEqual(deps.dirs, ['/r/.git/info']);
-  assert.deepEqual(deps.appended, [['/r/.git/info/exclude', '.worktrees/\n']]);
+  assert.deepEqual(deps.appended, [['/r/.git/info/exclude', '.worktrees/\n.orch/\n']]);
+});
+
+test('ensureIgnored appends only the directories not yet ignored', () => {
+  const deps = fake({
+    'git check-ignore -q .worktrees/x': ok(),
+    'git check-ignore': bad('', 1),
+    'git rev-parse': ok('.git\n'),
+  });
+  assert.equal(ensureIgnored(deps, '/r'), null);
+  assert.deepEqual(deps.appended, [['/r/.git/info/exclude', '.orch/\n']]);
 });
 
 test('ensureIgnored reports a failing rev-parse', () => {
@@ -93,7 +103,7 @@ test('create runs wt per task with the in-repo path template and prints task/bra
     { task: 'T2', branch: 'F--T2', path: '/r/.worktrees/F--T2' },
   ]);
   assert.equal(
-    lines(deps)[1],
+    lines(deps)[2],
     'wt --config-set worktree-path=".worktrees/{{ branch | sanitize }}" switch -c F--T1 --base F --no-cd --format=json --yes',
   );
 });
@@ -106,10 +116,10 @@ test('create omits --yes by default, and stops at the first wt failure', () => {
     'wt ': bad('Cannot prompt for approval'),
   });
   const { code, result } = create(deps, '/r', 'F', ['T1', 'T2', 'T3'], false);
-  assert.ok(!lines(deps)[1].includes('--yes'));
+  assert.ok(!lines(deps)[2].includes('--yes'));
   assert.equal(code, 1);
   assert.deepEqual(result, { status: 'error', task: 'T2', stderr: 'Cannot prompt for approval' });
-  assert.equal(deps.calls.length, 3);
+  assert.equal(deps.calls.length, 4);
 });
 
 test('create reports unparseable wt output and ignore failures', () => {

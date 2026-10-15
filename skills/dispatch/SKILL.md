@@ -7,6 +7,7 @@ description: "orch workflow: run independent substantial tasks from .scratch/<fe
 
 Run the plan in waves. Harness-specific spawn syntax:
 [Claude Code](references/claude.md) · [Codex](references/codex.md).
+Pane mode (herdr pane workers instead of subagents): [herdr](references/herdr.md).
 
 `orch` is the CLI shipped with this plugin; the session context names its
 absolute path. Use that path where the plugin's `bin/` is not on `PATH` (Codex).
