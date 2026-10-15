@@ -255,11 +255,12 @@ export function collect(io, root) {
   components(cdir, 'user', 'user');
   if (root !== home) components(join(root, '.claude'), 'project', 'project');
   const userSettings = join(cdir, 'settings.json');
+  // A project root at $HOME makes its settings.json the user one: read it once, as user.
   const settings = [
     [userSettings, 'user'],
     [join(root, '.claude', 'settings.json'), 'project'],
     [join(root, '.claude', 'settings.local.json'), 'project'],
-  ];
+  ].filter(([p, scope]) => scope === 'user' || p !== userSettings);
   const enabled = new Map();
   for (const [p, scope] of settings) {
     const s = json(p);
