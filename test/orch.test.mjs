@@ -308,3 +308,18 @@ test('bin/orch claude runs a fake claude end to end; missing claude exits 127', 
   assert.equal(missing.status, 127);
   assert.match(missing.stderr, /`claude` not found/);
 });
+
+test('context prints the audit and returns its code; usage goes to stderr', () => {
+  const ok = fakeIo({
+    cwd: '/work',
+    env: { HOME: '/nohome' },
+    exists: () => false,
+    readdir: () => [],
+    exec: () => ({ status: 1, stdout: '' }),
+  });
+  assert.equal(run(['context', '--json'], ok), 0);
+  assert.deepEqual(JSON.parse(ok.out), { sources: [], findings: [] });
+  const bad = fakeIo();
+  assert.equal(run(['context', '--bogus'], bad), 1);
+  assert.match(bad.err, /usage: orch context/);
+});

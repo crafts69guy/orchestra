@@ -1,3 +1,4 @@
+import { fail, format, pass, warn } from './lib/report.mjs';
 import { exec } from './orch-wt.mjs';
 
 const MIN_NODE = [22, 8];
@@ -5,12 +6,6 @@ const ORCH_FIX =
   'claude plugin marketplace add crafts69guy/orchestra && claude plugin install orch@orchestra';
 const PONYTAIL_FIX =
   'claude plugin marketplace add DietrichGebert/ponytail && claude plugin install ponytail@ponytail';
-
-const pass = (name, detail) => ({ mark: '✓', name, detail });
-const fail = (name, detail, fix) => ({ mark: '✗', name, detail, fix });
-const warn = (name, detail, fix) => ({ mark: '!', name, detail, fix });
-const format = ({ mark, name, detail, fix }) =>
-  `${mark} ${name}  ${detail}${fix ? ` — fix: ${fix}` : ''}`;
 
 /** exec that never throws; the first output line is the detail. */
 function probe(deps, cmd, args) {
