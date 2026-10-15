@@ -339,6 +339,45 @@ test('run: git root fallback and never throws', () => {
   assert.match(r.out, /✗ context {2}boom/);
 });
 
+test('manual-only skills cost no listing and skip description checks', () => {
+  const manualMd = (desc) =>
+    `---\nname: m\ndescription: ${desc}\ndisable-model-invocation: true\n---\nbody`;
+  const long = 'x'.repeat(301);
+  const files = {
+    [`${HOME}/.claude/skills/m1/SKILL.md`]: manualMd(`grill a plan ${long}`),
+    [`${HOME}/.claude/skills/m2/SKILL.md`]: manualMd('grill a plan ALWAYS'),
+    [`${HOME}/.claude/skills/auto/SKILL.md`]: skill('grill a plan ALWAYS'),
+    [`${HOME}/.agents/skills/c1/SKILL.md`]: skill(long),
+    [`${HOME}/.agents/skills/c1/agents/openai.yaml`]:
+      'policy:\n  allow_implicit_invocation: false\n',
+    [`${HOME}/.agents/skills/c2/SKILL.md`]: skill('auto'),
+    [`${HOME}/.agents/skills/c2/agents/openai.yaml`]: 'interface:\n  display_name: "C2"\n',
+  };
+  const collected = collect(fakeIo(files), ROOT);
+  const manual = collected.sources.filter((s) => s.manual).map((s) => `${s.harness}:${s.path}`);
+  assert.deepEqual(manual.sort(), [
+    `claude:${HOME}/.claude/skills/m1/SKILL.md`,
+    `claude:${HOME}/.claude/skills/m2/SKILL.md`,
+    `codex:${HOME}/.agents/skills/c1/SKILL.md`,
+  ]);
+  assert.ok(collected.sources.filter((s) => s.manual).every((s) => s.listing === 0));
+  const r = analyze(collected);
+  const budget = (h) => r.findings.find((f) => f.harness === h && f.name === 'budget').detail;
+  assert.match(budget('claude'), /1 skills, 0 agents, 0 commands; 2 manual-only, not listed\)/);
+  assert.match(budget('codex'), /1 skills, 0 agents, 0 commands; 1 manual-only, not listed\)/);
+  // Only the auto skill is checked: one broad-trigger, no description-long, no overlap.
+  assert.deepEqual(
+    names(r).filter((n) => !['budget', 'top'].includes(n)),
+    ['broad-trigger'],
+  );
+});
+
+test('a project root at $HOME does not read ~/.agents/skills twice', () => {
+  const files = { [`${HOME}/.agents/skills/as/SKILL.md`]: skill('agents skill') };
+  const r = collect(fakeIo(files, { cwd: HOME }), HOME);
+  assert.equal(r.sources.filter((s) => s.kind === 'skill').length, 1);
+});
+
 test('skill over 500 lines is flagged', () => {
   const files = { [`${HOME}/.claude/skills/big/SKILL.md`]: skill('d', 'l\n'.repeat(500)) };
   assert.deepEqual(names(collect(fakeIo(files), ROOT)), ['skill-body-large']);

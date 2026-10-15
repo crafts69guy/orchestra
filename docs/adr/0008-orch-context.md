@@ -24,7 +24,10 @@ compares scopes, or runs without starting a session.
   not measured.
 - Context is split into three tiers: always loaded (memory files and their
   imports), listing (name + description of skills, agents, commands) and
-  on demand (skill bodies). Tokens are estimated as characters / 4.
+  on demand (skill bodies). Tokens are estimated as characters / 4. Manual-only
+  skills (Claude `disable-model-invocation: true`, Codex `agents/openai.yaml`
+  `allow_implicit_invocation: false`) are never listed to the model, so they are
+  counted apart and skip the description checks.
 - Findings use `doctor`'s `✓ / ! / ✗ … — fix:` lines plus `·` for info.
   Exit 1 only on `✗` (a broken import, Codex project docs over
   `project_doc_max_bytes`), else 0. It never throws and never edits config.
