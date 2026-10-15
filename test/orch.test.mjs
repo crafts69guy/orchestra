@@ -265,11 +265,17 @@ test('unknown or missing subcommand prints usage on stderr and exits 1', () => {
 
 test('main wires the real io: --version reads package.json', () => {
   let out = '';
+  let onError;
+  const exits = [];
   const proc = {
     argv: ['node', 'orch', '--version'],
     env: {},
     cwd: () => tmp,
+    exit: (code) => exits.push(code),
     stdout: {
+      on: (event, fn) => {
+        if (event === 'error') onError = fn;
+      },
       write: (s) => {
         out += s;
       },
@@ -279,6 +285,10 @@ test('main wires the real io: --version reads package.json', () => {
   main(proc);
   assert.equal(proc.exitCode, 0);
   assert.equal(out, `${VERSION}\n`);
+  // A closed pipe exits quietly with the command's code; other stdout errors still surface.
+  onError(Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }));
+  assert.deepEqual(exits, [0]);
+  assert.throws(() => onError(Object.assign(new Error('boom'), { code: 'EIO' })), /boom/);
 });
 
 test('bin/orch claude runs a fake claude end to end; missing claude exits 127', () => {

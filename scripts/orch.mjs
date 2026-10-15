@@ -185,5 +185,10 @@ export function realIo(proc, metaUrl) {
 }
 
 export function main(proc = process, metaUrl = import.meta.url) {
+  // A reader that closed early (`orch context --json | head`) ends the output, not the process.
+  proc.stdout.on('error', (e) => {
+    if (e.code !== 'EPIPE') throw e;
+    proc.exit(proc.exitCode);
+  });
   proc.exitCode = run(proc.argv.slice(2), realIo(proc, metaUrl));
 }
