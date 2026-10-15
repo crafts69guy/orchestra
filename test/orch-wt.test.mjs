@@ -13,7 +13,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { create, ensureIgnored, exec, list, merge, realDeps, run } from '../scripts/orch-wt.mjs';
+import {
+  create,
+  ensureIgnored,
+  exec,
+  list,
+  merge,
+  realDeps,
+  remove,
+  run,
+} from '../scripts/orch-wt.mjs';
 
 const tmp = mkdtempSync(join(tmpdir(), 'orch-wt-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
@@ -410,4 +419,21 @@ test('integration: new then merge against real git + wt', {
   assert.deepEqual(JSON.parse(orch('list', 'feat').stdout), [
     { task: 'T4', branch: 'feat--T4', path: t4.path },
   ]);
+});
+
+test('remove force-removes the task worktree and its unmerged branch', () => {
+  const deps = fake({ 'wt remove': ok() });
+  assert.deepEqual(remove(deps, '/r', 'F', 'T1', false), {
+    code: 0,
+    result: { status: 'removed', task: 'T1', branch: 'F--T1' },
+  });
+  assert.deepEqual(lines(deps), ['wt remove F--T1 --foreground -D -f']);
+  assert.equal(run(['remove', 'F', 'T1', '--yes'], deps, '/r').code, 0);
+  assert.equal(lines(deps)[1], 'wt remove F--T1 --foreground -D -f --yes');
+  const failed = fake({ 'wt remove': bad('no such branch') });
+  assert.deepEqual(remove(failed, '/r', 'F', 'T1', false), {
+    code: 1,
+    result: { status: 'error', task: 'T1', stderr: 'no such branch' },
+  });
+  assert.equal(run(['remove', 'F'], deps, '/r').code, 1);
 });

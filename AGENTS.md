@@ -57,6 +57,11 @@ share), `scripts/doctor.mjs` (`orch doctor`) and `scripts/context.mjs` (`orch co
 Each module takes its process, filesystem and spawn dependencies as arguments. See
 [ADR-0005](docs/adr/0005-orch-cli.md).
 
+`orch wt new|merge|remove|list` manages task worktrees (`remove <feature> <task>` abandons one:
+worktree and branch, even unmerged). `orch pane start <feature> <task> --path <wt> --brief <file>`
+and `orch pane wait|prompt|close <task> --path <wt>` drive pane workers; every pane subcommand
+needs `--path`, because the herdr agent name hashes the worktree path.
+
 ## Codex launcher
 
 `orch codex` (logic in `scripts/orch-codex.mjs`) reuses `readRules` and `buildContext` from

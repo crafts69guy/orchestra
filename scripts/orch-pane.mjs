@@ -1,18 +1,28 @@
+import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { hasEvidence } from '../hooks/subagent-stop.mjs';
 import { REPORT_DIR } from './orch-wt.mjs';
 
 const USAGE =
-  'usage: orch pane start <feature> <task> --path <worktree> [--kind claude|codex] [--brief <file>] | orch pane wait <task> --path <worktree> [--timeout ms] | orch pane prompt <task> (--text <t> | --file <f>) | orch pane close <task>';
+  'usage: orch pane start <feature> <task> --path <worktree> --brief <file> [--kind claude|codex] | orch pane wait <task> --path <worktree> [--timeout ms] | orch pane prompt <task> --path <worktree> (--text <t> | --file <f>) | orch pane close <task> --path <worktree>';
 export const GATE_ERROR = 'orch: pane mode needs herdr (HERDR_ENV=1)';
 const PROMPT_WAIT = ['--wait', '--until', 'working', '--until', 'blocked', '--timeout', '30000'];
+/** Default `--timeout` (ms) of each `agent wait` in `orch pane wait`: 30 minutes. */
+export const WAIT_TIMEOUT = '1800000';
+const REPORT_FIELDS = '(Status, Changes, Validation, Notes, Docs)';
 
 const fail = (stderr, extra = {}) => ({ code: 1, result: { status: 'error', ...extra, stderr } });
 
-/** herdr agent name for a task: `orch-<task>` lowercased, other chars `-`, at most 32 chars. */
-export const agentName = (task) =>
-  `orch-${task.toLowerCase()}`.replace(/[^a-z0-9_-]/g, '-').slice(0, 32);
+/**
+ * herdr agent name for a task in a worktree: `orch-<first 6 hex of sha1(absPath)>-<task>`, the
+ * task lowercased with other chars as `-`, at most 32 chars. Unique per worktree, so a re-run of
+ * `start` on the same worktree finds the same agent and features cannot collide.
+ */
+export function agentName(task, absPath) {
+  const hash = createHash('sha1').update(absPath).digest('hex').slice(0, 6);
+  return `orch-${hash}-${task.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}`.slice(0, 32);
+}
 
 export const reportPath = (path) => join(path, REPORT_DIR, 'report.md');
 
@@ -80,58 +90,81 @@ export function workerPane(deps, feature, path) {
   return split.error ? split : paneIdOf(split.result.pane);
 }
 
-/** Submits `text` and waits until the agent works or blocks; `{ state }` or `{ error }`. */
+/**
+ * Submits `text` and waits until the agent works or blocks: `{ sent, state }` or `{ error }`.
+ * `sent` is false when herdr refused because the agent sits at an approval dialog.
+ */
 function sendPrompt(deps, name, text) {
   const r = herdr(deps, ['agent', 'prompt', name, text, ...PROMPT_WAIT]);
-  // herdr refuses to prompt an agent sitting at an approval dialog
-  if (r.code === 'agent_blocked') return { state: 'blocked' };
+  if (r.code === 'agent_blocked') return { sent: false, state: 'blocked' };
   if (r.error) return r;
   const state = r.result.agent?.agent_status;
   return typeof state === 'string'
-    ? { state }
+    ? { sent: true, state }
     : { error: 'herdr agent prompt has no agent_status' };
 }
 
-/** Opens a pane and starts the agent in it: `{ pane, blocked }` or `{ error, pane? }`. */
+/** Deletes a stale report so the next one is fresh; a missing file is fine. Error text or null. */
+function clearReport(deps, path) {
+  try {
+    deps.unlink(reportPath(path));
+  } catch (e) {
+    if (e.code !== 'ENOENT') return `orch: cannot delete ${reportPath(path)}: ${e.message}`;
+  }
+  return null;
+}
+
+/**
+ * Opens a pane and starts the agent in it: `{ pane, blocked }` or `{ error }`. A failed start
+ * closes the pane it just opened.
+ */
 function launch(deps, name, kind, feature, path) {
   const found = workerPane(deps, feature, path);
   if (found.error) return found;
   const model = deps.env.ORCH_LEVEL === 'high' ? 'opus' : 'sonnet';
-  const native = kind === 'claude' ? ['--', '--model', model] : [];
+  const native =
+    kind === 'claude' ? ['--', '--model', model] : ['--', '--sandbox', 'workspace-write'];
   const args = ['agent', 'start', name, '--kind', kind, '--pane', found.pane, ...native];
   const started = herdr(deps, args);
   if (started.code === 'agent_not_ready') return { pane: found.pane, blocked: true };
-  if (started.error) return { error: started.error, pane: found.pane };
+  if (started.error) {
+    herdr(deps, ['pane', 'close', found.pane]); // best effort: the start error is what matters
+    return { error: started.error };
+  }
   return { pane: found.pane, blocked: false };
 }
 
 /**
- * Starts the task's worker and sends it the implementer prompt. Re-runnable: when the agent
- * already exists (e.g. its start was blocked by a trust dialog the user has since cleared), it
- * skips the pane and agent start and only sends the prompt.
+ * Starts the task's worker and sends it the implementer prompt. Status `started`, or `not-sent`
+ * when a dialog (`agent_not_ready` / `agent_blocked`) kept the prompt from being delivered; `state`
+ * is the agent status after submission. Re-runnable: when the worktree's agent already exists
+ * (the user has since cleared the dialog), it skips the pane and agent start and only sends the
+ * prompt.
  */
 export function start(deps, cwd, { feature, task, path, kind, brief }) {
-  const name = agentName(task);
   const abs = resolve(cwd, path);
+  const name = agentName(task, abs);
   const existing = herdr(deps, ['agent', 'get', name]);
   let launched;
   if (existing.code === 'agent_not_found') launched = launch(deps, name, kind, feature, abs);
   else if (existing.error) return fail(existing.error, { task });
   else launched = { ...paneIdOf(existing.result.agent), blocked: false };
+  if (launched.error) return fail(launched.error, { task });
   const base = { task, name, pane: launched.pane, path: abs, kind };
-  if (launched.error) return fail(launched.error, launched.pane ? base : { task });
-  if (launched.blocked) return { code: 0, result: { status: 'blocked', ...base } };
-  const briefText = brief
-    ? resolve(cwd, brief)
-    : `the plan task ${task} in .scratch/${feature}/plan.md`;
+  if (launched.blocked) {
+    return { code: 0, result: { status: 'not-sent', state: 'blocked', ...base } };
+  }
+  const clearErr = clearReport(deps, abs);
+  if (clearErr !== null) return fail(clearErr, base);
   const text = [
     `You are an orch implementer. Read and follow ${join(deps.root, 'agents', 'implementer.md')}.`,
-    `Your brief: ${briefText}. Work only in ${abs}. Do not commit.`,
-    `When finished, write your full report (Status, Changes, Validation, Notes, Docs) to ${reportPath(abs)}.`,
+    `Your brief: ${resolve(cwd, brief)}. Work only in ${abs}. Do not commit.`,
+    `When finished, write your full report ${REPORT_FIELDS} to ${reportPath(abs)}.`,
   ].join(' ');
   const sent = sendPrompt(deps, name, text);
   if (sent.error) return fail(sent.error, base);
-  return { code: 0, result: { status: sent.state === 'blocked' ? 'blocked' : 'started', ...base } };
+  const status = sent.sent ? 'started' : 'not-sent';
+  return { code: 0, result: { status, state: sent.state, ...base } };
 }
 
 /** Text of the worker's report, or null when it is missing or unreadable. */
@@ -143,17 +176,49 @@ function readReport(deps, path) {
   }
 }
 
-export function wait(deps, cwd, { task, path, timeout }) {
-  const name = agentName(task);
+/** The agent's `agent_status`: `{ state }` or `{ error }`. */
+function agentState(deps, name) {
+  const got = herdr(deps, ['agent', 'get', name]);
+  if (got.error) return got;
+  const state = got.result.agent?.agent_status;
+  return typeof state === 'string' ? { state } : { error: 'herdr agent get has no agent_status' };
+}
+
+/**
+ * Waits for the worker to settle and reads its report. An agent already at a dialog (`blocked`)
+ * is first waited on until the user clears it; a timeout at either step gives state `timeout`.
+ */
+export function wait(deps, cwd, { task, path, timeout = WAIT_TIMEOUT }) {
   const abs = resolve(cwd, path);
-  const waited = herdr(deps, ['agent', 'wait', name, ...(timeout ? ['--timeout', timeout] : [])]);
-  let state = 'timeout';
-  if (waited.code !== 'timeout') {
+  const name = agentName(task, abs);
+  const before = agentState(deps, name);
+  if (before.error) return fail(before.error, { task });
+  const steps = [['--timeout', timeout]];
+  if (before.state === 'blocked') {
+    steps.unshift([
+      '--until',
+      'working',
+      '--until',
+      'idle',
+      '--until',
+      'done',
+      '--timeout',
+      timeout,
+    ]);
+  }
+  let state;
+  for (const step of steps) {
+    const waited = herdr(deps, ['agent', 'wait', name, ...step]);
+    if (waited.code === 'timeout') {
+      state = 'timeout';
+      break;
+    }
     if (waited.error) return fail(waited.error, { task });
-    const got = herdr(deps, ['agent', 'get', name]);
-    if (got.error) return fail(got.error, { task });
-    state = got.result.agent?.agent_status;
-    if (typeof state !== 'string') return fail('herdr agent get has no agent_status', { task });
+  }
+  if (state === undefined) {
+    const after = agentState(deps, name);
+    if (after.error) return fail(after.error, { task });
+    state = after.state;
   }
   const text = readReport(deps, abs);
   return {
@@ -167,14 +232,21 @@ export function wait(deps, cwd, { task, path, timeout }) {
   };
 }
 
-export function prompt(deps, cwd, { task, text, file }) {
-  const name = agentName(task);
-  const sent = sendPrompt(deps, name, file ? `Read and act on ${resolve(cwd, file)}` : text);
+/**
+ * Sends a follow-up (`Follow-up: ...`, so text starting with `-` is safe) after deleting the old
+ * report. Status `prompted`, or `not-sent` when the agent sits at a dialog.
+ */
+export function prompt(deps, cwd, { task, path, text, file }) {
+  const abs = resolve(cwd, path);
+  const name = agentName(task, abs);
+  const clearErr = clearReport(deps, abs);
+  if (clearErr !== null) return fail(clearErr, { task });
+  const body = file ? `read and act on ${resolve(cwd, file)}.` : text;
+  const full = `Follow-up: ${body} When done, rewrite your full report ${REPORT_FIELDS} to ${reportPath(abs)}.`;
+  const sent = sendPrompt(deps, name, full);
   if (sent.error) return fail(sent.error, { task });
-  return {
-    code: 0,
-    result: { status: sent.state === 'blocked' ? 'blocked' : 'prompted', task, name },
-  };
+  const status = sent.sent ? 'prompted' : 'not-sent';
+  return { code: 0, result: { status, state: sent.state, task, name } };
 }
 
 /**
@@ -182,8 +254,8 @@ export function prompt(deps, cwd, { task, text, file }) {
  * Not a cwd check: after `orch wt merge`, worktrunk moves the worktree (and the agent's cwd) to
  * `.git/wt/trash/`.
  */
-export function close(deps, { task }) {
-  const name = agentName(task);
+export function close(deps, cwd, { task, path }) {
+  const name = agentName(task, resolve(cwd, path));
   const got = herdr(deps, ['agent', 'get', name]);
   if (got.error) return fail(got.error, { task });
   const { tab_id: tab, pane_id: pane } = got.result.agent ?? {};
@@ -206,7 +278,7 @@ export function close(deps, { task }) {
 
 /**
  * `orch pane start|wait|prompt|close`. `deps`: `exec` (never throws), `readFile(path)` (utf8),
- * `env`, `hasCommand(name, PATH)`, plugin `root`. Returns `{ code, result }`; `result` is the
+ * `unlink(path)`, `env`, `hasCommand(name, PATH)`, plugin `root`. Returns `{ code, result }`; `result` is the
  * JSON document to print.
  */
 export function run(argv, deps, cwd) {
@@ -234,13 +306,16 @@ export function run(argv, deps, cwd) {
   const [cmd, ...pos] = parsed.positionals;
   const v = parsed.values;
   const kindOk = v.kind === 'claude' || v.kind === 'codex';
-  if (cmd === 'start' && pos.length === 2 && v.path && kindOk) {
+  if (!v.path) return fail(USAGE);
+  if (cmd === 'start' && pos.length === 2 && v.brief && kindOk) {
     return start(deps, cwd, { feature: pos[0], task: pos[1], ...v });
   }
-  if (cmd === 'wait' && pos.length === 1 && v.path) return wait(deps, cwd, { task: pos[0], ...v });
-  if (cmd === 'prompt' && pos.length === 1 && Boolean(v.text) !== Boolean(v.file)) {
-    return prompt(deps, cwd, { task: pos[0], ...v });
+  if (pos.length !== 1) return fail(USAGE);
+  const task = pos[0];
+  if (cmd === 'wait') return wait(deps, cwd, { task, ...v });
+  if (cmd === 'prompt' && Boolean(v.text) !== Boolean(v.file)) {
+    return prompt(deps, cwd, { task, ...v });
   }
-  if (cmd === 'close' && pos.length === 1) return close(deps, { task: pos[0] });
+  if (cmd === 'close') return close(deps, cwd, { task, ...v });
   return fail(USAGE);
 }

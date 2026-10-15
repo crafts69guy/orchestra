@@ -77,10 +77,11 @@ export function formatDeny(reason) {
 }
 
 /**
- * Returns the exit code; never throws, bad stdin JSON is a silent allow. The role comes from a
- * non-empty `agent_type` (a subagent, via `roleOf`); otherwise from `ORCH_ROLE`, which herdr pane
- * workers run with (`implementer`), else `main`. `ORCH_ROLE` can only restrict: values outside
- * the no-commit roles (e.g. `shipper`) are ignored, so an env var never grants push.
+ * Returns the exit code; never throws, bad stdin JSON is a silent allow. A no-commit `ORCH_ROLE`
+ * (herdr pane workers run with `implementer`) wins over `agent_type`, so even a subagent spawned
+ * inside a pane worker (`orch:shipper` included) stays restricted. Otherwise the role comes from
+ * `agent_type` via `roleOf` (`main` when empty or missing). `ORCH_ROLE` can only restrict: values
+ * outside the no-commit roles (e.g. `shipper`) are ignored, so an env var never grants push.
  */
 export function run({ env, input, stdout }) {
   if (env.ORCH !== '1') return 0;
@@ -90,9 +91,8 @@ export function run({ env, input, stdout }) {
   } catch {
     return 0;
   }
-  const type = payload?.agent_type;
-  const fallback = NO_COMMIT.has(env.ORCH_ROLE) ? env.ORCH_ROLE : 'main';
-  const role = typeof type === 'string' && type !== '' ? roleOf(type) : fallback;
+  const envRole = NO_COMMIT.has(env.ORCH_ROLE) ? env.ORCH_ROLE : null;
+  const role = envRole ?? roleOf(payload?.agent_type);
   const reason = decide(role, payload?.tool_input?.command);
   if (reason !== null) stdout(formatDeny(reason));
   return 0;

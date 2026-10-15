@@ -184,7 +184,7 @@ flowchart LR
 | `orch claude [--yolo] [args]` | runs `claude` with `ORCH=1`; adds `--model opus` unless `--model` is given; `--yolo` → `--dangerously-skip-permissions`; injects the `cocoindex-code` MCP server (`--mcp-config=`) when `ccc` is usable (§10) |
 | `orch codex [--yolo] [args]` | Codex launcher (§4); `--yolo` → `--dangerously-bypass-approvals-and-sandbox`; injects the `cocoindex-code` MCP server (`-c mcp_servers.…`) when `ccc` is usable |
 | `orch ccc init [--force]` | indexes the git root with `ccc` (refuses repos under 200 files without `--force`), ensures `max_file_size: 256KB`, runs `ccc index` ([ADR-0007](adr/0007-ccc-integration.md)) |
-| `orch wt new\|merge\|list` | worktree helper for dispatch (§8) |
+| `orch wt new\|merge\|remove\|list` | worktree helper for dispatch (§8) |
 | `orch pane start\|wait\|prompt\|close` | runs dispatch implementers as `claude`/`codex` sessions in herdr panes; inside herdr only ([ADR-0009](adr/0009-herdr-pane-workers.md)) |
 | `orch doctor` | checks node, git, `wt`, `ccc` (warning only), `herdr` (inside herdr only, warning only), a harness and the installed plugins; exit 1 if a required check fails |
 | `orch context [--scope user\|project\|all] [--json]` | static audit of what Claude Code and Codex load (memory and imports, skills, agents, commands, plugins, MCP): token estimates, findings, exit 1 only on `✗` ([ADR-0008](adr/0008-orch-context.md)) |
@@ -314,6 +314,7 @@ works on both harnesses.
 |---|---|
 | `orch wt new <F> <T>… [--yes]` | ignores `.worktrees/` via `.git/info/exclude`, then `wt --config-set 'worktree-path=".worktrees/{{ branch \| sanitize }}"' switch -c <F>--<T> --base <F> --no-cd --format=json`; prints `[{task, branch, path}]` |
 | `orch wt merge <F> <T> --message <msg> [--yes]` | commits with the orchestrator's message (squashing extra commits), pre-checks with `git merge-tree --write-tree`, then `wt merge <F> --no-commit`; prints `merged` with the commit, or `conflict` with files (exit 2, rebase aborted) |
+| `orch wt remove <F> <T> [--yes]` | abandons a task: `wt remove <F>--<T> --foreground -D -f`, even when dirty or unmerged; prints `removed` |
 | `orch wt list <F>` | prints `[{task, branch, path}]` for the worktrees whose branch is `<F>--<task>` |
 
 Design notes from P0:

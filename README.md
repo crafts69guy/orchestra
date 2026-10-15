@@ -54,8 +54,8 @@ codex plugin add orch@orchestra
 | `orch codex [--yolo] [args...]` | starts `codex` with `ORCH=1` and the orchestration context (below) |
 | `orch update` | updates the npm CLI, then the plugin for each harness that has the `orchestra` marketplace (`claude plugin update orch@orchestra`, `codex plugin marketplace upgrade orchestra`); skips npm from a git checkout |
 | `orch ccc init [--force]` | indexes this repo with `ccc` for semantic search (repos under 200 files need `--force`) |
-| `orch wt new\|merge\|list ...` | worktree helper used by the `dispatch` skill; prints JSON |
-| `orch pane start\|wait\|prompt\|close ...` | herdr pane workers for the `dispatch` skill (pane mode, below); prints JSON |
+| `orch wt new\|merge\|remove\|list ...` | worktree helper used by the `dispatch` skill (`remove` abandons a task: worktree and branch); prints JSON |
+| `orch pane start <F> <T> --path <wt> --brief <file>`, `wait\|prompt\|close <T> --path <wt> ...` | herdr pane workers for the `dispatch` skill (pane mode, below); prints JSON |
 | `orch eval [args...]` | behaviour evals; only from a git checkout (see [AGENTS.md](AGENTS.md)) |
 | `orch --help`, `orch --version` | usage and version |
 

@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pluginRoot, which } from '../hooks/session-start.mjs';
 import { run as ccc, cccEnabled, claudeMcpArg } from './ccc.mjs';
@@ -124,6 +124,7 @@ export const commands = {
         env: {
           ...io.env,
           ORCH: '1',
+          ORCH_ROLE: '', // a pane worker's role must not leak into a new orchestrator
           ...(level === undefined ? {} : { ORCH_LEVEL: level }),
           ...(panes ? { ORCH_PANES: '1' } : {}),
         },
@@ -151,6 +152,7 @@ export const commands = {
     const deps = {
       exec: io.exec,
       readFile: (p) => io.read(p, 'utf8'),
+      unlink: io.unlink,
       env: io.env,
       hasCommand: io.hasCommand,
       root: io.root,
@@ -224,6 +226,7 @@ export function realIo(proc, metaUrl) {
     exists: existsSync,
     read: readFileSync,
     write: writeFileSync,
+    unlink: unlinkSync,
     readdir: readdirSync,
     hasCommand: which,
     exec,

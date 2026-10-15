@@ -16,6 +16,7 @@ import {
   splitYolo,
   USAGE,
 } from '../scripts/orch.mjs';
+import { agentName } from '../scripts/orch-pane.mjs';
 
 const tmp = mkdtempSync(join(tmpdir(), 'orch-cli-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
@@ -109,7 +110,7 @@ test('claude spawns with ORCH=1, never bypasses permissions by default, propagat
   const [{ cmd, args, opts }] = io.spawned;
   assert.equal(cmd, 'claude');
   assert.deepEqual(args, ['--model', 'opus', 'hi']);
-  assert.deepEqual(opts.env, { PATH: '/bin', ORCH: '1' });
+  assert.deepEqual(opts.env, { PATH: '/bin', ORCH: '1', ORCH_ROLE: '' });
 });
 
 test('splitLevel strips --level in both forms', () => {
@@ -372,6 +373,7 @@ test('splitPanes strips --panes; claude --panes sets ORCH_PANES and stays out of
   assert.equal(run(['claude', '--panes', '--level', 'high', 'hi'], io), 0);
   assert.deepEqual(io.spawned[0].args, ['--model', 'opus', 'hi']);
   assert.equal(io.spawned[0].opts.env.ORCH_PANES, '1');
+  assert.equal(io.spawned[0].opts.env.ORCH_ROLE, '', 'a pane worker role never leaks');
   const plain = fakeIo();
   run(['claude'], plain);
   assert.equal('ORCH_PANES' in plain.spawned[0].opts.env, false);
@@ -379,11 +381,13 @@ test('splitPanes strips --panes; claude --panes sets ORCH_PANES and stays out of
 
 test('pane prints the JSON result and returns its code', () => {
   const gated = fakeIo();
-  assert.equal(run(['pane', 'close', 'T'], gated), 1);
+  assert.equal(run(['pane', 'close', 'T', '--path', 'wt'], gated), 1);
   assert.match(JSON.parse(gated.out).stderr, /pane mode needs herdr/);
 
   const calls = [];
+  const unlinked = [];
   const io = fakeIo({
+    unlink: (p) => unlinked.push(p),
     env: { HERDR_ENV: '1', HERDR_WORKSPACE_ID: 'w1', PATH: '/bin' },
     hasCommand: (name) => name === 'herdr',
     exec: (cmd, args) => {
@@ -406,5 +410,13 @@ test('pane prints the JSON result and returns its code', () => {
     report: '/work/wt/.orch/report.md',
     evidence: true,
   });
-  assert.deepEqual(calls, ['herdr agent wait orch-t', 'herdr agent get orch-t']);
+  const name = agentName('T', '/work/wt');
+  assert.deepEqual(calls, [
+    `herdr agent get ${name}`,
+    `herdr agent wait ${name} --timeout 1800000`,
+    `herdr agent get ${name}`,
+  ]);
+  io.out = '';
+  run(['pane', 'prompt', 'T', '--path', 'wt', '--text', 'x'], io);
+  assert.deepEqual(unlinked, ['/work/wt/.orch/report.md']);
 });

@@ -90,6 +90,6 @@ export function run({
     commonDir: gitDir(cwd),
     mcp: ccc ? codexMcpArgs() : [],
   });
-  const r = spawn([...prefix, ...argv], { ...env, ORCH: '1' });
+  const r = spawn([...prefix, ...argv], { ...env, ORCH: '1', ORCH_ROLE: '' });
   return spawnExit(r, 'codex', stderr, 'install Codex CLI first.');
 }

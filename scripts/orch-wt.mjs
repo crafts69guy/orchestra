@@ -6,7 +6,7 @@ import { parseArgs } from 'node:util';
 export const WORKTREE_DIR = '.worktrees';
 const PATH_TEMPLATE = `worktree-path="${WORKTREE_DIR}/{{ branch | sanitize }}"`;
 const USAGE =
-  'usage: orch wt new <feature> <task>... [--yes] | orch wt merge <feature> <task> --message <msg> [--yes] | orch wt list <feature>';
+  'usage: orch wt new <feature> <task>... [--yes] | orch wt merge <feature> <task> --message <msg> [--yes] | orch wt remove <feature> <task> [--yes] | orch wt list <feature>';
 
 /** Real exec: never throws; a spawn failure (e.g. ENOENT) becomes status 127. */
 export function exec(cmd, args, cwd) {
@@ -158,6 +158,18 @@ export function merge(deps, cwd, feature, task, message, yes) {
   return { code: 0, result: { status: 'merged', task, commit } };
 }
 
+/**
+ * Abandons a task: removes its worktree (even dirty) and deletes its branch (even unmerged).
+ * Returns `{ status: 'removed', task, branch }`.
+ */
+export function remove(deps, cwd, feature, task, yes) {
+  const branch = taskBranch(feature, task);
+  const args = ['remove', branch, '--foreground', '-D', '-f', ...(yes ? ['--yes'] : [])];
+  const r = deps.exec('wt', args, cwd);
+  if (r.status !== 0) return fail(task, r.stderr);
+  return { code: 0, result: { status: 'removed', task, branch } };
+}
+
 /** Returns `{ code, result }`; `result` is the JSON document to print. */
 export function run(argv, deps, cwd) {
   let parsed;
@@ -175,6 +187,9 @@ export function run(argv, deps, cwd) {
   if (cmd === 'new' && feature && tasks.length > 0) return create(deps, cwd, feature, tasks, yes);
   if (cmd === 'merge' && feature && tasks.length === 1 && message) {
     return merge(deps, cwd, feature, tasks[0], message, yes);
+  }
+  if (cmd === 'remove' && feature && tasks.length === 1) {
+    return remove(deps, cwd, feature, tasks[0], yes);
   }
   if (cmd === 'list' && feature && tasks.length === 0) return list(deps, cwd, feature);
   return fail(null, USAGE);

@@ -106,7 +106,7 @@ test('run prepends context, agents and --add-dir, adds ORCH=1 and propagates the
   assert.ok(!instructions.includes('worktrunk'));
   assert.deepEqual(args.slice(-4), ['--add-dir', '/repo/.git', 'exec', 'hello']);
   assert.equal(args.filter((a) => a.startsWith('agents.')).length, 5);
-  assert.deepEqual(env, { PATH: '/bin', KEEP: 'y', ORCH: '1' });
+  assert.deepEqual(env, { PATH: '/bin', KEEP: 'y', ORCH: '1', ORCH_ROLE: '' });
 });
 
 test('run includes the wt warning when wt is missing and skips --add-dir outside git', () => {

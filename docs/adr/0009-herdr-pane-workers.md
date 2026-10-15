@@ -19,21 +19,34 @@ through a JSON CLI (`herdr tab|pane|agent ...`).
   flag keeps the `<!-- orch:panes -->` rule line, which points `dispatch` at
   `skills/dispatch/references/herdr.md`, and adds `orch pane` to the CLI line.
 - `orch pane` (`scripts/orch-pane.mjs`) wraps the herdr CLI and prints JSON:
-  - `start <feature> <task> --path <worktree> [--kind claude|codex] [--brief <file>]`
+  - Every subcommand takes `--path <worktree>`. The agent is named
+    `orch-<first 6 hex of sha1(worktree path)>-<task>` (at most 32 chars), so
+    names are unique per worktree and a re-run finds the same agent.
+  - `start <feature> <task> --path <worktree> --brief <file> [--kind claude|codex]`
     opens (or splits, up to a 2x2 grid) an `orch:<feature>` tab, starts the
-    agent `orch-<task>` with `ORCH=1 ORCH_ROLE=implementer` (and `ORCH_LEVEL`),
-    Claude on sonnet (opus with `ORCH_LEVEL=high`), and prompts it with the
-    implementer instructions and its brief.
-  - `wait <task> --path <worktree> [--timeout ms]` waits for a settled state and
-    reads `<worktree>/.orch/report.md`, reporting `evidence` with the
-    subagent-stop hook's `hasEvidence`.
-  - `prompt <task> (--text | --file)` sends follow-ups; `close <task>` closes
-    the pane only when it sits in an `orch:*` tab. Not a cwd check: after
+    agent with `ORCH=1 ORCH_ROLE=implementer` (and `ORCH_LEVEL`), Claude on
+    sonnet (opus with `ORCH_LEVEL=high`), Codex with
+    `--sandbox workspace-write`, and prompts it with the implementer
+    instructions and its brief. A failed agent start closes the new pane. When
+    the agent already exists, `start` only sends the prompt.
+  - `start` reports `started` or `not-sent`, `prompt` reports `prompted` or
+    `not-sent`. `not-sent` means a dialog kept the prompt from being delivered
+    (`agent_not_ready`, `agent_blocked`). Both carry `state`, the agent status
+    after submission. Both delete the old report first.
+  - `wait <task> --path <worktree> [--timeout ms]` (30 minutes by default)
+    first waits out a dialog the agent is already blocked on, then waits for a
+    settled state and reads `<worktree>/.orch/report.md`, reporting `evidence`
+    with the subagent-stop hook's `hasEvidence`.
+  - `prompt` sends follow-ups prefixed `Follow-up:`; `close` closes the pane
+    only when it sits in an `orch:*` tab. Not a cwd check: after
     `orch wt merge`, worktrunk moves the worktree, and the agent's cwd with
-    it, to `.git/wt/trash/`.
-- Workers are main sessions, so `ORCH_ROLE` replaces `agent_type`: the guard
-  hook falls back to it when `agent_type` is empty, and the session-start hook
-  injects nothing when it is set. `orch wt new` adds `.orch/` to
+    it, to `.git/wt/trash/`. `orch wt remove <feature> <task>` drops an
+    abandoned task's worktree and branch.
+- Workers are main sessions, so they carry `ORCH_ROLE=implementer`. A no-commit
+  `ORCH_ROLE` overrides `agent_type` in the guard hook, so a subagent spawned
+  inside a worker (`orch:shipper` included) stays restricted; other values are
+  ignored. `orch claude` and `orch codex` clear `ORCH_ROLE` for a new
+  orchestrator. The session-start hook injects nothing when it is set. `orch wt new` adds `.orch/` to
   `.git/info/exclude`, so reports never land in a merge commit.
 - Every subcommand refuses to run outside herdr (`HERDR_ENV=1`, a workspace id,
   `herdr` on `PATH`). `orch doctor` shows herdr as an optional line.
@@ -44,11 +57,12 @@ through a JSON CLI (`herdr tab|pane|agent ...`).
   gain is visibility and control.
 - Not benchmarkable in the eval sandbox, which has no herdr server; covered by
   unit tests with a fake `exec` only.
-- A new worktree is an untrusted directory, so Claude's trust dialog (and any
-  approval dialog) surfaces as `blocked`; the orchestrator asks the user to
-  look at the pane and never answers it itself.
-- Codex workers have no guard hook; their sandbox blocks writes to the shared
-  `.git`, so they cannot commit.
+- Dialogs surface as `not-sent` or `state: blocked`; the orchestrator asks the
+  user to look at the pane and never answers them itself. Verified live:
+  Claude workers inherit trust from a trusted repo, while Codex asks once per
+  repo root and remembers it.
+- Codex workers have no guard hook; their `workspace-write` sandbox blocks
+  writes to the shared `.git`, so they cannot commit.
 - Rejected: Claude's cross-session SendMessage as the primary channel. It is
   Claude-only and has no lifecycle wait; herdr's `agent wait` works for both
   harnesses.
