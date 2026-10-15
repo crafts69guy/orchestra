@@ -372,10 +372,20 @@ test('manual-only skills cost no listing and skip description checks', () => {
   );
 });
 
-test('a project root at $HOME does not read ~/.agents/skills twice', () => {
-  const files = { [`${HOME}/.agents/skills/as/SKILL.md`]: skill('agents skill') };
+test('a project root at $HOME reads ~/.agents/skills and ~/.claude/settings.json once', () => {
+  const files = {
+    [`${HOME}/.agents/skills/as/SKILL.md`]: skill('agents skill'),
+    [`${HOME}/.claude/settings.json`]: JSON.stringify({
+      enabledPlugins: { 'p@m': true },
+      hooks: { SessionStart: [] },
+    }),
+    [`${HOME}/.claude/settings.local.json`]: JSON.stringify({ enabledPlugins: { 'q@m': true } }),
+  };
   const r = collect(fakeIo(files, { cwd: HOME }), HOME);
   assert.equal(r.sources.filter((s) => s.kind === 'skill').length, 1);
+  assert.equal(r.sources.filter((s) => s.kind === 'hook').length, 1);
+  // settings.local.json at the root is still project settings, so no plugin is in both scopes.
+  assert.deepEqual(names(r), []);
 });
 
 test('skill over 500 lines is flagged', () => {
