@@ -26,26 +26,39 @@ function deps(overrides = {}, nodeVersion = '22.16.0') {
 }
 
 test('all checks pass', () => {
-  assert.deepEqual(run(deps()), {
-    code: 0,
-    lines: [
-      '✓ node  v22.16.0',
-      '✓ git  git version 2.55.0',
-      '✓ wt  wt v0.80.0',
-      '✓ ccc  ccc 0.4.0',
-      '· herdr  not in herdr (pane mode off)',
-      '✓ claude  2.1.0 (Claude Code)',
-      '✓ orch@orchestra  enabled (0.2.0, user)',
-      '✓ ponytail@ponytail  enabled (0.2.0, user)',
-      '✓ codex  codex-cli 0.162.1',
-    ],
+  const r = run(deps());
+  assert.equal(r.checks.length, r.lines.length);
+  assert.deepEqual(r.checks[0], { mark: '✓', status: 'pass', name: 'node', detail: 'v22.16.0' });
+  assert.deepEqual(r.checks[4], {
+    mark: '·',
+    status: 'info',
+    name: 'herdr',
+    detail: 'not in herdr (pane mode off)',
   });
+  assert.deepEqual(
+    { code: r.code, lines: r.lines },
+    {
+      code: 0,
+      lines: [
+        '✓ node  v22.16.0',
+        '✓ git  git version 2.55.0',
+        '✓ wt  wt v0.80.0',
+        '✓ ccc  ccc 0.4.0',
+        '· herdr  not in herdr (pane mode off)',
+        '✓ claude  2.1.0 (Claude Code)',
+        '✓ orch@orchestra  enabled (0.2.0, user)',
+        '✓ ponytail@ponytail  enabled (0.2.0, user)',
+        '✓ codex  codex-cli 0.162.1',
+      ],
+    },
+  );
 });
 
 test('checkNode enforces >= 22.8', () => {
   assert.equal(checkNode('22.8.0').mark, '✓');
   assert.equal(checkNode('v23.0.0').mark, '✓');
   assert.equal(checkNode('22.7.9').mark, '✗');
+  assert.equal(checkNode('22.7.9').status, 'fail');
   assert.equal(checkNode('20.11.0').mark, '✗');
 });
 
@@ -62,6 +75,7 @@ test('missing required tools and old node fail with fix hints', () => {
 test('a missing harness is a warning while the other one exists', () => {
   const noCodex = run(deps({ 'codex --version': undefined }));
   assert.equal(noCodex.code, 0);
+  assert.equal(noCodex.checks.at(-1).status, 'warn');
   assert.match(
     noCodex.lines.at(-1),
     /^! codex {2}spawnSync x ENOENT — fix: npm i -g @openai\/codex$/,

@@ -199,6 +199,51 @@ test('doctor prints one line per check and returns its code', () => {
   assert.ok(io.out.endsWith('\n'));
 });
 
+test('doctor --json prints schemaVersion and checks with the same code; bad args are usage', () => {
+  const doctorDeps = {
+    nodeVersion: '22.8.0',
+    exec: () => ({ status: 1, stdout: '', stderr: 'x' }),
+  };
+  const io = fakeIo({ doctorDeps });
+  assert.equal(run(['doctor', '--json'], io), 1);
+  const doc = JSON.parse(io.out);
+  assert.equal(doc.schemaVersion, 1);
+  assert.deepEqual(doc.checks[0], { mark: '✓', status: 'pass', name: 'node', detail: 'v22.8.0' });
+  assert.ok(doc.checks.some((c) => c.status === 'fail'));
+  const bad = fakeIo({ doctorDeps });
+  assert.equal(run(['doctor', '--bogus'], bad), 1);
+  assert.equal(bad.out, '');
+  assert.equal(bad.err, 'usage: orch doctor [--json]\n');
+});
+
+test('status wires io into the collector; warnings and errors go to stderr', () => {
+  const io = fakeIo({
+    exec: (cmd) =>
+      cmd === 'git'
+        ? { status: 0, stdout: '/work/.git\n', stderr: '' }
+        : { status: 1, stdout: '', stderr: 'no wt' },
+    readdir: () => ['f'],
+    read: (p, enc) => {
+      assert.equal(enc, 'utf8');
+      assert.equal(p, '/work/.scratch/f/plan.md');
+      return '## Tasks\n\n```yaml\n- id: T1\n```\n';
+    },
+  });
+  assert.equal(run(['status'], io), 0);
+  assert.equal(io.out, 'f/T1  -  -\n');
+  assert.equal(io.err, 'orch status: wt list failed; worktrees unknown: no wt\n');
+  const json = fakeIo({ exec: () => ({ status: 128, stdout: '', stderr: '' }) });
+  assert.equal(run(['status', '--json'], json), 1);
+  assert.equal(json.out, '');
+  assert.match(json.err, /not a git repository: \/work/);
+});
+
+test('USAGE lists status, doctor --json and wt remove', () => {
+  assert.match(USAGE, /status \[--json\]/);
+  assert.match(USAGE, /doctor \[--json\]/);
+  assert.match(USAGE, /wt new\|merge\|remove\|list/);
+});
+
 /** Fake `exec` for `<cmd> plugin marketplace list --json`: `lists[cmd]` is the result. */
 const marketplaces = (lists) => (cmd) => lists[cmd] ?? { status: 127, stdout: '' };
 const ORCHESTRA = { status: 0, stdout: '[{"name":"orchestra"}]' };
@@ -360,7 +405,7 @@ test('context prints the audit and returns its code; usage goes to stderr', () =
     exec: () => ({ status: 1, stdout: '' }),
   });
   assert.equal(run(['context', '--json'], ok), 0);
-  assert.deepEqual(JSON.parse(ok.out), { sources: [], findings: [] });
+  assert.deepEqual(JSON.parse(ok.out), { schemaVersion: 1, sources: [], findings: [] });
   const bad = fakeIo();
   assert.equal(run(['context', '--bogus'], bad), 1);
   assert.match(bad.err, /usage: orch context/);

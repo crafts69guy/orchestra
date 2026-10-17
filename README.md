@@ -48,7 +48,8 @@ codex plugin add orch@orchestra
 
 | Command | Does |
 |---|---|
-| `orch doctor` | checks Node, git, `wt`, the harness CLIs and the installed plugins |
+| `orch doctor [--json]` | checks Node, git, `wt`, the harness CLIs and the installed plugins |
+| `orch status [--json]` | one line per plan task (`.scratch/<feature>/plan.md`) with its worktree, pane agent state and report status |
 | `orch context [--scope user\|project\|all] [--json]` | audits what Claude Code and Codex load into context (memory, skills, agents, plugins, MCP): token estimates and findings |
 | `orch claude [--yolo] [--level high] [--panes] [args...]` | starts `claude` with `ORCH=1` and `--model opus` (unless you pass `--model`) |
 | `orch codex [--yolo] [args...]` | starts `codex` with `ORCH=1` and the orchestration context (below) |
@@ -58,6 +59,10 @@ codex plugin add orch@orchestra
 | `orch pane start <F> <T> --path <wt> --brief <file>`, `wait\|prompt\|close <T> --path <wt> ...` | herdr pane workers for the `dispatch` skill (pane mode, below); prints JSON |
 | `orch eval [args...]` | behaviour evals; only from a git checkout (see [AGENTS.md](AGENTS.md)) |
 | `orch --help`, `orch --version` | usage and version |
+
+`orch status --json`, `orch doctor --json` and `orch context --json` are a versioned contract
+(`schemaVersion`) for external clients such as a Raycast extension; see
+[ADR-0010](docs/adr/0010-json-contract-for-external-clients.md).
 
 `--yolo` turns off permission prompts for that run (`--dangerously-skip-permissions` on Claude,
 `--dangerously-bypass-approvals-and-sandbox` on Codex). Without it the harness keeps its normal

@@ -478,7 +478,10 @@ export function run(args, io) {
     result = { sources: [], findings: [{ ...fail('context', e.message), harness: 'claude' }] };
   }
   const code = result.findings.some((f) => f.mark === '✗') ? 1 : 0;
-  if (asJson) return { code, out: `${JSON.stringify(result, null, 2)}\n`, err: '' };
+  if (asJson) {
+    const doc = { schemaVersion: 1, ...result }; // ADR-0010 contract
+    return { code, out: `${JSON.stringify(doc, null, 2)}\n`, err: '' };
+  }
   const lines = [];
   for (const harness of ['claude', 'codex']) {
     const own = result.findings.filter((f) => f.harness === harness);

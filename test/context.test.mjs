@@ -309,7 +309,8 @@ test('run: text output, json output, usage errors and exit codes', () => {
   assert.match(text.out, /\ncodex\n/);
   assert.match(text.out, /✗ broken-import/);
   const ok = run(['--json', '--scope=user'], fakeIo({}));
-  assert.deepEqual(JSON.parse(ok.out), { sources: [], findings: [] });
+  assert.deepEqual(JSON.parse(ok.out), { schemaVersion: 1, sources: [], findings: [] });
+  assert.match(ok.out, /^\{\n {2}"schemaVersion": 1,/);
   assert.equal(ok.code, 0);
   for (const bad of [['--nope'], ['--scope', 'x'], ['--scope']]) {
     const r = run(bad, fakeIo({}));

@@ -8,16 +8,18 @@ import { run as doctor } from './doctor.mjs';
 import { run as codex, gitCommonDir, spawnExit } from './orch-codex.mjs';
 import { run as pane } from './orch-pane.mjs';
 import { exec, run as wt, realDeps as wtDeps } from './orch-wt.mjs';
+import { run as status } from './status.mjs';
 
 export const USAGE = `usage: orch <command> [args]
 
 commands:
   claude [--yolo] [--level high] [--panes] [args]   run claude with the orch workflow (ORCH=1, --model opus by default)
   codex [--yolo] [args]    run codex with the orch workflow
-  wt new|merge|list ...    manage task worktrees (prints JSON)
+  wt new|merge|remove|list ...   manage task worktrees (prints JSON)
   pane start|wait|prompt|close ...   drive herdr pane workers (prints JSON; inside herdr only)
   ccc init [--force]       index this repo for semantic search (cocoindex-code)
-  doctor                   check prerequisites
+  status [--json]          show plan tasks with their worktrees, pane agents and reports
+  doctor [--json]          check prerequisites
   context [--scope ...] [--json]   audit what Claude/Codex load into context
   update                   update the npm CLI and the installed Claude/Codex plugins
   eval [args]              run the behaviour evals (git checkout only)
@@ -161,9 +163,30 @@ export const commands = {
     io.stdout(`${JSON.stringify(result)}\n`);
     return code;
   },
-  doctor(_args, io) {
-    const { code, lines } = doctor(io.doctorDeps);
-    io.stdout(`${lines.join('\n')}\n`);
+  /** `--json` prints `{ schemaVersion: 1, checks }` (see ADR-0010); same exit code as text. */
+  doctor(args, io) {
+    const json = args.includes('--json');
+    if (args.some((a) => a !== '--json')) {
+      io.stderr('usage: orch doctor [--json]\n');
+      return 1;
+    }
+    const { code, lines, checks } = doctor(io.doctorDeps);
+    io.stdout(
+      json ? `${JSON.stringify({ schemaVersion: 1, checks }, null, 2)}\n` : `${lines.join('\n')}\n`,
+    );
+    return code;
+  },
+  status(args, io) {
+    const deps = {
+      exec: io.exec,
+      readdir: io.readdir,
+      readFile: (p) => io.read(p, 'utf8'),
+      env: io.env,
+      hasCommand: io.hasCommand,
+    };
+    const { code, out, err } = status(args, deps, io.cwd);
+    if (out) io.stdout(out);
+    if (err) io.stderr(err);
     return code;
   },
   context(args, io) {

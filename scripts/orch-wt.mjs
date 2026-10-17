@@ -61,9 +61,9 @@ export function create(deps, cwd, feature, tasks, yes) {
 }
 
 /** `wt list` items that have a worktree, as `{ branch, path }`, or `{ error }`. */
-function worktrees(deps, cwd) {
+export function worktrees(deps, cwd) {
   const r = deps.exec('wt', ['list', '--format=json'], cwd);
-  if (r.status !== 0) return { error: r.stderr };
+  if (r.status !== 0) return { error: r.stderr || `wt list exited ${r.status}` };
   try {
     const items = JSON.parse(r.stdout).items.filter((i) => i.worktree?.path);
     return { items: items.map((i) => ({ branch: i.branch, path: i.worktree.path })) };
@@ -79,15 +79,19 @@ function findWorktree(deps, cwd, branch) {
   return item ? { path: item.path } : { error: `no worktree for branch ${branch}` };
 }
 
+/** The `worktrees()` items of `feature` (branches `<feature>--<task>`) as `{ task, branch, path }`. */
+export function featureTasks(items, feature) {
+  const prefix = taskBranch(feature, '');
+  return items
+    .filter((i) => i.branch?.startsWith(prefix) && i.branch.length > prefix.length)
+    .map(({ branch, path }) => ({ task: branch.slice(prefix.length), branch, path }));
+}
+
 /** Task worktrees of `feature`: branches named `<feature>--<task>`. */
 export function list(deps, cwd, feature) {
   const found = worktrees(deps, cwd);
   if (found.error) return fail(null, found.error);
-  const prefix = taskBranch(feature, '');
-  const result = found.items
-    .filter((i) => i.branch?.startsWith(prefix) && i.branch.length > prefix.length)
-    .map(({ branch, path }) => ({ task: branch.slice(prefix.length), branch, path }));
-  return { code: 0, result };
+  return { code: 0, result: featureTasks(found.items, feature) };
 }
 
 /** Commit pending work as ONE commit with our message; wt's own fallback message is not conventional. */

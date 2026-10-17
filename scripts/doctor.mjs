@@ -53,7 +53,10 @@ export function checkPlugins(deps) {
   ];
 }
 
-/** Returns `{ code, lines }`; code is 1 when any required check fails. Never throws. */
+/**
+ * Returns `{ code, lines, checks }`: `checks` are the report objects (see `lib/report.mjs`),
+ * `lines` their text form. code is 1 when any required check fails. Never throws.
+ */
 export function run(deps = realDeps) {
   const checks = [
     checkNode(deps.nodeVersion),
@@ -76,6 +79,7 @@ export function run(deps = realDeps) {
   return {
     code: checks.some((c) => c.mark === '✗') ? 1 : 0,
     lines: checks.map(format),
+    checks,
   };
 }
 

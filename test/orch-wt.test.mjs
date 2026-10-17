@@ -334,6 +334,7 @@ test('list returns the feature task worktrees only', () => {
     code: 1,
     result: { status: 'error', task: null, stderr: 'no wt' },
   });
+  assert.deepEqual(list(fake({ 'wt list': bad('') }), '/r', 'F').result.stderr, 'wt list exited 1');
   for (const argv of [['list'], ['list', 'F', 'T1']]) assert.equal(run(argv, deps, '/r').code, 1);
 });
 

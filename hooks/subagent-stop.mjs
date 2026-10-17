@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { readStdin, roleOf } from './guard.mjs';
 import { isEntry } from './session-start.mjs';
 
-const STATUS = /^[\s>*#-]*Status\W*(done|partial|blocked)\b/im;
+/** Matches a report's `Status: done|partial|blocked` line; group 1 is the status. */
+export const STATUS = /^[\s>*#-]*Status\W*(done|partial|blocked)\b/im;
 const VALIDATION = /^[\s>*#-]*Validation\b/im;
 
 export const BLOCK_REASON =

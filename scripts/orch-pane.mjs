@@ -168,7 +168,7 @@ export function start(deps, cwd, { feature, task, path, kind, brief }) {
 }
 
 /** Text of the worker's report, or null when it is missing or unreadable. */
-function readReport(deps, path) {
+export function readReport(deps, path) {
   try {
     return deps.readFile(reportPath(path));
   } catch {
@@ -177,7 +177,7 @@ function readReport(deps, path) {
 }
 
 /** The agent's `agent_status`: `{ state }` or `{ error }`. */
-function agentState(deps, name) {
+export function agentState(deps, name) {
   const got = herdr(deps, ['agent', 'get', name]);
   if (got.error) return got;
   const state = got.result.agent?.agent_status;

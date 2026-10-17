@@ -20,6 +20,10 @@ and **Codex CLI**; opencode and others come later through the same adapter seam.
 | Enforcement by hooks where prompts are not enough | Agent teams / peer-to-peer agent chat (experimental, skipped) |
 | Fully tested glue code (≥98% coverage), linted and formatted | Runtime dependencies beyond Node and worktrunk |
 
+GUIs live outside this repo: external clients (a Raycast extension) read orch through the
+versioned `--json` output of `orch status`, `orch doctor` and `orch context`
+([ADR-0010](adr/0010-json-contract-for-external-clients.md)).
+
 ## 2. System context
 
 ```mermaid
@@ -98,7 +102,7 @@ orchestra/
 │   ├── session-start.mjs        # ORCH gate, rules injection, wt check
 │   ├── guard.mjs                # PreToolUse: push/PR only from shipper
 │   └── subagent-stop.mjs        # implementer evidence gate
-├── bin/orch                     # CLI entry (npm bin): claude, codex, wt, pane, doctor, context, update, eval
+├── bin/orch                     # CLI entry (npm bin): claude, codex, wt, pane, status, doctor, context, update, eval
 ├── scripts/
 │   ├── orch.mjs                 # subcommand dispatcher, `orch claude`
 │   ├── ccc.mjs                  # `orch ccc init`, MCP injection gate (cocoindex-code)
@@ -106,6 +110,7 @@ orchestra/
 │   ├── orch-pane.mjs            # `orch pane`: herdr pane workers (ADR-0009)
 │   ├── orch-codex.mjs           # `orch codex`: rules, agents, sandbox dirs
 │   ├── doctor.mjs               # `orch doctor`: prerequisite checks
+│   ├── status.mjs               # `orch status`: plan tasks, worktrees, agents, reports (ADR-0010)
 │   ├── context.mjs              # `orch context`: static audit of loaded context (ADR-0008)
 │   └── gen-codex-agents.mjs, lib/
 ├── test/                        # node:test, ≥98% coverage
@@ -186,7 +191,8 @@ flowchart LR
 | `orch ccc init [--force]` | indexes the git root with `ccc` (refuses repos under 200 files without `--force`), ensures `max_file_size: 256KB`, runs `ccc index` ([ADR-0007](adr/0007-ccc-integration.md)) |
 | `orch wt new\|merge\|remove\|list` | worktree helper for dispatch (§8) |
 | `orch pane start\|wait\|prompt\|close` | runs dispatch implementers as `claude`/`codex` sessions in herdr panes; inside herdr only ([ADR-0009](adr/0009-herdr-pane-workers.md)) |
-| `orch doctor` | checks node, git, `wt`, `ccc` (warning only), `herdr` (inside herdr only, warning only), a harness and the installed plugins; exit 1 if a required check fails |
+| `orch status [--json]` | per plan task: worktree, herdr agent state and report status; `--json` is the versioned contract for external clients ([ADR-0010](adr/0010-json-contract-for-external-clients.md)) |
+| `orch doctor [--json]` | checks node, git, `wt`, `ccc` (warning only), `herdr` (inside herdr only, warning only), a harness and the installed plugins; exit 1 if a required check fails; `--json` prints `{ schemaVersion, checks }` |
 | `orch context [--scope user\|project\|all] [--json]` | static audit of what Claude Code and Codex load (memory and imports, skills, agents, commands, plugins, MCP): token estimates, findings, exit 1 only on `✗` ([ADR-0008](adr/0008-orch-context.md)) |
 | `orch update` | `npm i -g` the CLI (skipped in a git checkout), then updates the plugin for each harness that has the `orchestra` marketplace, then `uv tool upgrade cocoindex-code` when it is installed; runs every step, exits with the first failure |
 | `orch eval [args]` | behaviour evals; exits 1 when `evals/` is absent (npm install) |

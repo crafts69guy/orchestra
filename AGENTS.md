@@ -52,8 +52,9 @@ body (`developer_instructions`). `model` is not mapped, so Codex inherits the us
 (`orch wt`), `scripts/orch-pane.mjs` (`orch pane`, herdr pane workers; gated on `HERDR_ENV=1`,
 see [ADR-0009](docs/adr/0009-herdr-pane-workers.md)), `scripts/orch-codex.mjs` (`orch codex`),
 `scripts/ccc.mjs` (`orch ccc`, plus the cocoindex-code MCP gate the launchers and the session hook
-share), `scripts/doctor.mjs` (`orch doctor`) and `scripts/context.mjs` (`orch context`; it shares
-`scripts/lib/report.mjs` with doctor), and runs `orch claude`, `orch update` and `orch eval` itself.
+share), `scripts/doctor.mjs` (`orch doctor [--json]`), `scripts/status.mjs` (`orch status [--json]`)
+and `scripts/context.mjs` (`orch context`; it shares `scripts/lib/report.mjs` with doctor), and
+runs `orch claude`, `orch update` and `orch eval` itself.
 Each module takes its process, filesystem and spawn dependencies as arguments. See
 [ADR-0005](docs/adr/0005-orch-cli.md).
 
@@ -61,6 +62,10 @@ Each module takes its process, filesystem and spawn dependencies as arguments. S
 worktree and branch, even unmerged). `orch pane start <feature> <task> --path <wt> --brief <file>`
 and `orch pane wait|prompt|close <task> --path <wt>` drive pane workers; every pane subcommand
 needs `--path`, because the herdr agent name hashes the worktree path.
+
+`orch status --json`, `orch doctor --json` and `orch context --json` are a public contract for
+external clients (the Raycast extension): additive fields keep `schemaVersion: 1`, renames and
+removals bump it. See [ADR-0010](docs/adr/0010-json-contract-for-external-clients.md).
 
 ## Codex launcher
 
