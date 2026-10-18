@@ -1,5 +1,5 @@
 /**
- * Check-result helpers shared by `orch doctor` and `orch context`. `status` is the
+ * Check-result helpers shared by `orc doctor` and `orc context`. `status` is the
  * machine-readable twin of `mark` for `--json` consumers: pass, fail, warn or info.
  */
 export const pass = (name, detail) => ({ mark: '✓', status: 'pass', name, detail });

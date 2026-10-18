@@ -8,7 +8,7 @@ const GIT_VALUE_OPTS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--names
 const GH_VALUE_OPTS = new Set(['-R', '--repo']);
 const GH_PR_WRITE = new Set(['create', 'merge', 'edit']);
 
-/** `orch:implementer` (Claude) and `implementer` (Codex) both give `implementer`; no agent_type is the main thread. */
+/** `orc:implementer` (Claude) and `implementer` (Codex) both give `implementer`; no agent_type is the main thread. */
 export function roleOf(agentType) {
   if (typeof agentType !== 'string' || agentType === '') return 'main';
   return agentType.replace(/^[^:]+:/, '');
@@ -57,10 +57,10 @@ export function decide(role, command) {
   for (const seg of segments(command)) {
     const kind = classify(seg);
     if ((kind === 'push' || kind === 'pr') && role !== 'shipper') {
-      return `orch: only the shipper role may push or manage pull requests (role: ${role}).`;
+      return `orc: only the shipper role may push or manage pull requests (role: ${role}).`;
     }
     if (kind === 'commit' && NO_COMMIT.has(role)) {
-      return `orch: the ${role} role must not commit; leave changes in the working tree for the orchestrator.`;
+      return `orc: the ${role} role must not commit; leave changes in the working tree for the orchestrator.`;
     }
   }
   return null;
@@ -77,21 +77,21 @@ export function formatDeny(reason) {
 }
 
 /**
- * Returns the exit code; never throws, bad stdin JSON is a silent allow. A no-commit `ORCH_ROLE`
+ * Returns the exit code; never throws, bad stdin JSON is a silent allow. A no-commit `ORC_ROLE`
  * (herdr pane workers run with `implementer`) wins over `agent_type`, so even a subagent spawned
- * inside a pane worker (`orch:shipper` included) stays restricted. Otherwise the role comes from
- * `agent_type` via `roleOf` (`main` when empty or missing). `ORCH_ROLE` can only restrict: values
+ * inside a pane worker (`orc:shipper` included) stays restricted. Otherwise the role comes from
+ * `agent_type` via `roleOf` (`main` when empty or missing). `ORC_ROLE` can only restrict: values
  * outside the no-commit roles (e.g. `shipper`) are ignored, so an env var never grants push.
  */
 export function run({ env, input, stdout }) {
-  if (env.ORCH !== '1') return 0;
+  if (env.ORC !== '1') return 0;
   let payload;
   try {
     payload = JSON.parse(input);
   } catch {
     return 0;
   }
-  const envRole = NO_COMMIT.has(env.ORCH_ROLE) ? env.ORCH_ROLE : null;
+  const envRole = NO_COMMIT.has(env.ORC_ROLE) ? env.ORC_ROLE : null;
   const role = envRole ?? roleOf(payload?.agent_type);
   const reason = decide(role, payload?.tool_input?.command);
   if (reason !== null) stdout(formatDeny(reason));
@@ -109,7 +109,7 @@ export function readStdin() {
 export function main(proc = process, read = readStdin) {
   proc.exitCode = run({
     env: proc.env,
-    input: proc.env.ORCH === '1' ? read() : '',
+    input: proc.env.ORC === '1' ? read() : '',
     stdout: (s) => proc.stdout.write(s),
   });
 }

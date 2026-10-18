@@ -1,6 +1,6 @@
 {
   "name": "@crafts69guy/orchestra",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "type": "module",
   "description": "Cross-harness (Claude Code + Codex) orchestration workflow plugin",
   "license": "MIT",
@@ -18,7 +18,7 @@
     "cli"
   ],
   "bin": {
-    "orch": "bin/orch"
+    "orc": "bin/orc"
   },
   "files": [
     "bin",

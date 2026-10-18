@@ -6,8 +6,8 @@ const ok = (stdout) => ({ status: 0, stdout, stderr: '' });
 const missing = { status: 127, stdout: '', stderr: 'spawnSync x ENOENT' };
 const plugin = (id, enabled = true, scope = 'user') => ({ id, version: '0.2.0', scope, enabled });
 const PLUGINS = JSON.stringify([
-  plugin('orch@orchestra', false, 'project'),
-  plugin('orch@orchestra'),
+  plugin('orc@orchestra', false, 'project'),
+  plugin('orc@orchestra'),
   plugin('ponytail@ponytail'),
 ]);
 
@@ -46,7 +46,7 @@ test('all checks pass', () => {
         '✓ ccc  ccc 0.4.0',
         '· herdr  not in herdr (pane mode off)',
         '✓ claude  2.1.0 (Claude Code)',
-        '✓ orch@orchestra  enabled (0.2.0, user)',
+        '✓ orc@orchestra  enabled (0.2.0, user)',
         '✓ ponytail@ponytail  enabled (0.2.0, user)',
         '✓ codex  codex-cli 0.162.1',
       ],
@@ -84,7 +84,7 @@ test('a missing harness is a warning while the other one exists', () => {
   const noClaude = run(deps({ 'claude --version': undefined }));
   assert.equal(noClaude.code, 0);
   assert.match(noClaude.lines[5], /^! claude .* — fix: install Claude Code$/);
-  assert.ok(!noClaude.lines.some((l) => l.includes('orch@orchestra')), 'plugins skipped');
+  assert.ok(!noClaude.lines.some((l) => l.includes('orc@orchestra')), 'plugins skipped');
 });
 
 test('no harness at all fails', () => {
@@ -96,11 +96,11 @@ test('no harness at all fails', () => {
   );
 });
 
-test('orch missing fails, ponytail missing only warns', () => {
-  const list = JSON.stringify([plugin('orch@orchestra', false), null, plugin('other@x')]);
-  const [orch, ponytail] = checkPlugins(deps({ 'claude plugin list --json': ok(list) }));
-  assert.equal(orch.mark, '✗');
-  assert.match(orch.fix, /claude plugin install orch@orchestra/);
+test('orc missing fails, ponytail missing only warns', () => {
+  const list = JSON.stringify([plugin('orc@orchestra', false), null, plugin('other@x')]);
+  const [orc, ponytail] = checkPlugins(deps({ 'claude plugin list --json': ok(list) }));
+  assert.equal(orc.mark, '✗');
+  assert.match(orc.fix, /claude plugin install orc@orchestra/);
   assert.equal(ponytail.mark, '!');
   assert.match(ponytail.fix, /claude plugin install ponytail@ponytail/);
 
@@ -108,17 +108,17 @@ test('orch missing fails, ponytail missing only warns', () => {
   assert.equal(r.code, 1);
   assert.match(
     r.lines[6],
-    /^✗ orch@orchestra {2}not installed or not enabled — fix: claude plugin marketplace add crafts69guy\/orchestra/,
+    /^✗ orc@orchestra {2}not installed or not enabled — fix: claude plugin marketplace add crafts69guy\/orchestra/,
   );
   assert.match(r.lines[7], /^! ponytail@ponytail /);
 });
 
-test('unusable plugin list output becomes a failed orch check', () => {
+test('unusable plugin list output becomes a failed orc check', () => {
   const cases = [
     [{ status: 1, stdout: '', stderr: 'not logged in\nmore' }, 'not logged in'],
     [{ status: 1, stdout: '', stderr: '' }, 'claude plugin list failed'],
     [ok('not json'), /JSON/],
-    [ok('{"id":"orch@orchestra"}'), 'claude plugin list --json is not an array'],
+    [ok('{"id":"orc@orchestra"}'), 'claude plugin list --json is not an array'],
   ];
   for (const [result, detail] of cases) {
     const checks = checkPlugins(deps({ 'claude plugin list --json': result }));

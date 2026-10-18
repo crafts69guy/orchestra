@@ -15,7 +15,7 @@ const MODULES = {
   schema: ['validate'],
   expr: ['evaluate'],
 };
-const tmp = mkdtempSync(join(tmpdir(), 'orch-bench-large-'));
+const tmp = mkdtempSync(join(tmpdir(), 'orc-bench-large-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
 
 // Lays out src/ (reference, optionally overridden per module) and .git/acceptance/, then runs

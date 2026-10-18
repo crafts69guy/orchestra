@@ -6,7 +6,7 @@ import { parseArgs } from 'node:util';
 export const WORKTREE_DIR = '.worktrees';
 const PATH_TEMPLATE = `worktree-path="${WORKTREE_DIR}/{{ branch | sanitize }}"`;
 const USAGE =
-  'usage: orch wt new <feature> <task>... [--yes] | orch wt merge <feature> <task> --message <msg> [--yes] | orch wt remove <feature> <task> [--yes] | orch wt list <feature>';
+  'usage: orc wt new <feature> <task>... [--yes] | orc wt merge <feature> <task> --message <msg> [--yes] | orc wt remove <feature> <task> [--yes] | orc wt list <feature>';
 
 /** Real exec: never throws; a spawn failure (e.g. ENOENT) becomes status 127. */
 export function exec(cmd, args, cwd) {
@@ -24,10 +24,10 @@ const git = (deps, cwd, ...args) => deps.exec('git', args, cwd);
 const fail = (task, stderr) => ({ code: 1, result: { status: 'error', task, stderr } });
 const lines = (s) => s.split('\n').filter(Boolean);
 
-/** Pane workers write `<worktree>/.orch/report.md`; ignored so it never lands in a merge commit. */
-export const REPORT_DIR = '.orch';
+/** Pane workers write `<worktree>/.orc/report.md`; ignored so it never lands in a merge commit. */
+export const REPORT_DIR = '.orc';
 
-/** Keep `.worktrees/` and `.orch/` out of `git status` without touching tracked files. */
+/** Keep `.worktrees/` and `.orc/` out of `git status` without touching tracked files. */
 export function ensureIgnored(deps, cwd) {
   const missing = [WORKTREE_DIR, REPORT_DIR].filter(
     (dir) => git(deps, cwd, 'check-ignore', '-q', `${dir}/x`).status !== 0,

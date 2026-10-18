@@ -2,7 +2,7 @@ import { dirname, join, resolve } from 'node:path';
 import { parseFrontmatter } from './lib/frontmatter.mjs';
 import { fail, format, info, warn } from './lib/report.mjs';
 
-export const USAGE = 'usage: orch context [--scope user|project|all] [--json]\n';
+export const USAGE = 'usage: orc context [--scope user|project|all] [--json]\n';
 // ponytail: heuristics, not harness limits; tune when real sessions say otherwise.
 export const ALWAYS_WARN_TOKENS = 6000;
 export const LISTING_WARN_TOKENS = 5000;

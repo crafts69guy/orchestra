@@ -1,6 +1,6 @@
 # Architecture
 
-Orchestra (`orch`) turns a coding agent session into an **orchestrator** that
+Orchestra (`orc`) turns a coding agent session into an **orchestrator** that
 delegates token-heavy work to role-specific **subagents**, and runs independent
 implementation tasks **in parallel**, each in its own git worktree.
 
@@ -15,13 +15,13 @@ and **Codex CLI**; opencode and others come later through the same adapter seam.
 | Goals | Non-goals |
 |---|---|
 | One source of truth for roles, rules and skills across harnesses | A GUI, kanban board or TUI |
-| Opt-in per session (`ORCH=1`), invisible otherwise | Replacing the harness's own planning or permission model |
+| Opt-in per session (`ORC=1`), invisible otherwise | Replacing the harness's own planning or permission model |
 | Parallel implementers on disjoint tasks, merged one at a time | Parallel writers on the same checkout |
 | Enforcement by hooks where prompts are not enough | Agent teams / peer-to-peer agent chat (experimental, skipped) |
 | Fully tested glue code (≥98% coverage), linted and formatted | Runtime dependencies beyond Node and worktrunk |
 
-GUIs live outside this repo: external clients (a Raycast extension) read orch through the
-versioned `--json` output of `orch status`, `orch doctor` and `orch context`
+GUIs live outside this repo: external clients (a Raycast extension) read orc through the
+versioned `--json` output of `orc status`, `orc doctor` and `orc context`
 ([ADR-0010](adr/0010-json-contract-for-external-clients.md)).
 
 ## 2. System context
@@ -30,23 +30,23 @@ versioned `--json` output of `orch status`, `orch doctor` and `orch context`
 flowchart LR
   user([Developer])
   subgraph harness["Agent harness (Claude Code / Codex CLI)"]
-    orch["Orchestrator<br/>main thread"]
+    orc["Orchestrator<br/>main thread"]
     subs["Subagents<br/>scoper · implementer · reviewer · shipper"]
   end
-  plugin[["orch plugin<br/>rules · agents · skills · hooks"]]
+  plugin[["orc plugin<br/>rules · agents · skills · hooks"]]
   pony[["ponytail plugin<br/>YAGNI ruleset"]]
   wt["worktrunk (wt)"]
   git[(git repo<br/>+ worktrees)]
   mcp["MCP servers<br/>cocoindex-code (injected) · context7"]
   gh["GitHub"]
 
-  user -->|"orch claude / orch codex<br/>(ORCH=1)"| orch
-  plugin -->|"SessionStart: rules"| orch
+  user -->|"orc claude / orc codex<br/>(ORC=1)"| orc
+  plugin -->|"SessionStart: rules"| orc
   plugin -->|"agent definitions"| subs
-  pony -->|"SessionStart / SubagentStart"| orch
+  pony -->|"SessionStart / SubagentStart"| orc
   pony --> subs
-  orch -->|"spawn, brief, resume"| subs
-  orch -->|"wt switch / merge"| wt --> git
+  orc -->|"spawn, brief, resume"| subs
+  orc -->|"wt switch / merge"| wt --> git
   subs -->|"read / edit / test"| git
   user -->|"launchers inject cocoindex-code<br/>when ccc is on PATH and the repo is indexed"| mcp
   subs -.->|"allowlisted tools"| mcp
@@ -74,7 +74,7 @@ flowchart TB
     toml["codex/agents/*.toml<br/>(generated, committed)"]
   end
   gen["scripts/gen-codex-agents.mjs"]
-  inst["orch codex launcher<br/>-c agents.NAME.config_file"]
+  inst["orc codex launcher<br/>-c agents.NAME.config_file"]
 
   agents --> cman
   skills --> cman
@@ -99,19 +99,19 @@ orchestra/
 │       └── references/{claude,codex}.md
 ├── hooks/
 │   ├── hooks.json               # shared by both harnesses
-│   ├── session-start.mjs        # ORCH gate, rules injection, wt check
+│   ├── session-start.mjs        # ORC gate, rules injection, wt check
 │   ├── guard.mjs                # PreToolUse: push/PR only from shipper
 │   └── subagent-stop.mjs        # implementer evidence gate
-├── bin/orch                     # CLI entry (npm bin): claude, codex, wt, pane, status, doctor, context, update, eval
+├── bin/orc                     # CLI entry (npm bin): claude, codex, wt, pane, status, doctor, context, update, eval
 ├── scripts/
-│   ├── orch.mjs                 # subcommand dispatcher, `orch claude`
-│   ├── ccc.mjs                  # `orch ccc init`, MCP injection gate (cocoindex-code)
-│   ├── orch-wt.mjs              # `orch wt`: worktrunk wrapper used by dispatch
-│   ├── orch-pane.mjs            # `orch pane`: herdr pane workers (ADR-0009)
-│   ├── orch-codex.mjs           # `orch codex`: rules, agents, sandbox dirs
-│   ├── doctor.mjs               # `orch doctor`: prerequisite checks
-│   ├── status.mjs               # `orch status`: plan tasks, worktrees, agents, reports (ADR-0010)
-│   ├── context.mjs              # `orch context`: static audit of loaded context (ADR-0008)
+│   ├── orc.mjs                 # subcommand dispatcher, `orc claude`
+│   ├── ccc.mjs                  # `orc ccc init`, MCP injection gate (cocoindex-code)
+│   ├── orc-wt.mjs              # `orc wt`: worktrunk wrapper used by dispatch
+│   ├── orc-pane.mjs            # `orc pane`: herdr pane workers (ADR-0009)
+│   ├── orc-codex.mjs           # `orc codex`: rules, agents, sandbox dirs
+│   ├── doctor.mjs               # `orc doctor`: prerequisite checks
+│   ├── status.mjs               # `orc status`: plan tasks, worktrees, agents, reports (ADR-0010)
+│   ├── context.mjs              # `orc context`: static audit of loaded context (ADR-0008)
 │   └── gen-codex-agents.mjs, lib/
 ├── test/                        # node:test, ≥98% coverage
 ├── evals/                       # claude plugin eval suites
@@ -121,23 +121,23 @@ orchestra/
 ## 4. Activation
 
 The plugin is installed and enabled globally, but stays inert unless the
-session was started with `ORCH=1` ([ADR-0003](adr/0003-env-gated-activation.md)).
+session was started with `ORC=1` ([ADR-0003](adr/0003-env-gated-activation.md)).
 
 ```mermaid
 sequenceDiagram
   autonumber
   actor Dev
-  participant CLI as orch claude
+  participant CLI as orc claude
   participant H as Harness
   participant Hook as session-start.mjs
   participant Main as Orchestrator
 
-  Dev->>CLI: orch claude [--yolo] [args]
-  CLI->>H: ORCH=1 claude --model opus …
+  Dev->>CLI: orc claude [--yolo] [args]
+  CLI->>H: ORC=1 claude --model opus …
   H->>Hook: SessionStart (startup/resume/clear/compact)
-  alt ORCH != 1
+  alt ORC != 1
     Hook-->>H: exit 0, no output
-  else ORCH == 1
+  else ORC == 1
     Hook->>Hook: read rules/orchestrator.md
     Hook->>Hook: which wt? (append warning if missing)
     Hook-->>H: additionalContext = rules
@@ -147,17 +147,17 @@ sequenceDiagram
 
 Re-injection on `compact` keeps the rules alive after context compaction.
 
-The context ends with the absolute path of `orch`, so agents can call
-`orch wt` even where the plugin's `bin/` is not on `PATH`.
+The context ends with the absolute path of `orc`, so agents can call
+`orc wt` even where the plugin's `bin/` is not on `PATH`.
 
-On Codex, hooks only run after the user trusts them, so `orch codex`
+On Codex, hooks only run after the user trusts them, so `orc codex`
 carries the same context without hooks:
 
 ```mermaid
 flowchart LR
-  dev(["orch codex [--yolo]"]) --> launcher["scripts/orch-codex.mjs"]
-  launcher -->|"ORCH=1"| codex["codex"]
-  launcher -->|"-c developer_instructions=rules + orch path"| codex
+  dev(["orc codex [--yolo]"]) --> launcher["scripts/orc-codex.mjs"]
+  launcher -->|"ORC=1"| codex["codex"]
+  launcher -->|"-c developer_instructions=rules + orc path"| codex
   launcher -->|"-c agents.NAME.config_file / description"| codex
   launcher -->|"-c mcp_servers.cocoindex-code.*<br/>(ccc on PATH, repo indexed)"| codex
   launcher -->|"--add-dir GIT_COMMON_DIR"| codex
@@ -165,17 +165,17 @@ flowchart LR
 
 ## 5. CLI
 
-`orch` is one Node entry point (`bin/orch`), shipped as the npm package
+`orc` is one Node entry point (`bin/orc`), shipped as the npm package
 `@crafts69guy/orchestra` and inside the plugin
-([ADR-0005](adr/0005-orch-cli.md)). It replaces the old `bin/orch-wt` and
-`bin/orch-codex` shims and the dotfiles' `cyl --wf` / `cdx --wf` wrappers.
+([ADR-0005](adr/0005-orc-cli.md)). It replaces the old `bin/orc-wt` and
+`bin/orc-codex` shims and the dotfiles' `cyl --wf` / `cdx --wf` wrappers.
 
 ```mermaid
 flowchart LR
-  bin["bin/orch"] --> disp["scripts/orch.mjs<br/>dispatcher"]
-  disp -->|"claude [--yolo]"| claude["claude<br/>ORCH=1, --model opus"]
-  disp -->|"codex [--yolo]"| ocx["scripts/orch-codex.mjs"] --> codex["codex"]
-  disp -->|"wt new · merge · list"| owt["scripts/orch-wt.mjs"] --> wt["worktrunk + git"]
+  bin["bin/orc"] --> disp["scripts/orc.mjs<br/>dispatcher"]
+  disp -->|"claude [--yolo]"| claude["claude<br/>ORC=1, --model opus"]
+  disp -->|"codex [--yolo]"| ocx["scripts/orc-codex.mjs"] --> codex["codex"]
+  disp -->|"wt new · merge · list"| owt["scripts/orc-wt.mjs"] --> wt["worktrunk + git"]
   disp -->|"ccc init [--force]"| occ["scripts/ccc.mjs"] --> ccc["ccc init · index"]
   disp -->|"doctor"| doc["scripts/doctor.mjs"]
   disp -->|"context"| ctx["scripts/context.mjs"]
@@ -186,16 +186,16 @@ flowchart LR
 
 | Command | Does |
 |---|---|
-| `orch claude [--yolo] [args]` | runs `claude` with `ORCH=1`; adds `--model opus` unless `--model` is given; `--yolo` → `--dangerously-skip-permissions`; injects the `cocoindex-code` MCP server (`--mcp-config=`) when `ccc` is usable (§10) |
-| `orch codex [--yolo] [args]` | Codex launcher (§4); `--yolo` → `--dangerously-bypass-approvals-and-sandbox`; injects the `cocoindex-code` MCP server (`-c mcp_servers.…`) when `ccc` is usable |
-| `orch ccc init [--force]` | indexes the git root with `ccc` (refuses repos under 200 files without `--force`), ensures `max_file_size: 256KB`, runs `ccc index` ([ADR-0007](adr/0007-ccc-integration.md)) |
-| `orch wt new\|merge\|remove\|list` | worktree helper for dispatch (§8) |
-| `orch pane start\|wait\|prompt\|close` | runs dispatch implementers as `claude`/`codex` sessions in herdr panes; inside herdr only ([ADR-0009](adr/0009-herdr-pane-workers.md)) |
-| `orch status [--json]` | per plan task: worktree, herdr agent state and report status; `--json` is the versioned contract for external clients ([ADR-0010](adr/0010-json-contract-for-external-clients.md)) |
-| `orch doctor [--json]` | checks node, git, `wt`, `ccc` (warning only), `herdr` (inside herdr only, warning only), a harness and the installed plugins; exit 1 if a required check fails; `--json` prints `{ schemaVersion, checks }` |
-| `orch context [--scope user\|project\|all] [--json]` | static audit of what Claude Code and Codex load (memory and imports, skills, agents, commands, plugins, MCP): token estimates, findings, exit 1 only on `✗` ([ADR-0008](adr/0008-orch-context.md)) |
-| `orch update` | `npm i -g` the CLI (skipped in a git checkout), then updates the plugin for each harness that has the `orchestra` marketplace, then `uv tool upgrade cocoindex-code` when it is installed; runs every step, exits with the first failure |
-| `orch eval [args]` | behaviour evals; exits 1 when `evals/` is absent (npm install) |
+| `orc claude [--yolo] [args]` | runs `claude` with `ORC=1`; adds `--model opus` unless `--model` is given; `--yolo` → `--dangerously-skip-permissions`; injects the `cocoindex-code` MCP server (`--mcp-config=`) when `ccc` is usable (§10) |
+| `orc codex [--yolo] [args]` | Codex launcher (§4); `--yolo` → `--dangerously-bypass-approvals-and-sandbox`; injects the `cocoindex-code` MCP server (`-c mcp_servers.…`) when `ccc` is usable |
+| `orc ccc init [--force]` | indexes the git root with `ccc` (refuses repos under 200 files without `--force`), ensures `max_file_size: 256KB`, runs `ccc index` ([ADR-0007](adr/0007-ccc-integration.md)) |
+| `orc wt new\|merge\|remove\|list` | worktree helper for dispatch (§8) |
+| `orc pane start\|wait\|prompt\|close` | runs dispatch implementers as `claude`/`codex` sessions in herdr panes; inside herdr only ([ADR-0009](adr/0009-herdr-pane-workers.md)) |
+| `orc status [--json]` | per plan task: worktree, herdr agent state and report status; `--json` is the versioned contract for external clients ([ADR-0010](adr/0010-json-contract-for-external-clients.md)) |
+| `orc doctor [--json]` | checks node, git, `wt`, `ccc` (warning only), `herdr` (inside herdr only, warning only), a harness and the installed plugins; exit 1 if a required check fails; `--json` prints `{ schemaVersion, checks }` |
+| `orc context [--scope user\|project\|all] [--json]` | static audit of what Claude Code and Codex load (memory and imports, skills, agents, commands, plugins, MCP): token estimates, findings, exit 1 only on `✗` ([ADR-0008](adr/0008-orc-context.md)) |
+| `orc update` | `npm i -g` the CLI (skipped in a git checkout), then updates the plugin for each harness that has the `orchestra` marketplace, then `uv tool upgrade cocoindex-code` when it is installed; runs every step, exits with the first failure |
+| `orc eval [args]` | behaviour evals; exits 1 when `evals/` is absent (npm install) |
 
 Exit codes pass through from the child (a signal becomes 1); a missing
 `claude` or `codex` binary exits 127. Permission bypass is never the default.
@@ -288,7 +288,7 @@ sequenceDiagram
   participant I2 as implementer T2
   participant G as git
 
-  O->>WT: orch wt new F T1 T2
+  O->>WT: orc wt new F T1 T2
   WT->>G: wt switch -c F--Tn --base F --no-cd (.worktrees/, pre-start hooks)
   par one message, ≤4 per wave
     O->>I1: brief + worktree path
@@ -297,9 +297,9 @@ sequenceDiagram
   I1-->>O: Status done + evidence (uncommitted)
   I2-->>O: Status done + evidence (uncommitted)
   O->>O: review each diff
-  O->>WT: orch wt merge F T1 --message "feat: …"
+  O->>WT: orc wt merge F T1 --message "feat: …"
   WT->>G: commit → merge-tree pre-check → wt merge --no-commit (rebase, pre-merge, ff, remove)
-  O->>WT: orch wt merge F T2 --message "fix: …"
+  O->>WT: orc wt merge F T2 --message "fix: …"
   alt conflict (exit 2)
     WT-->>O: status conflict, rebase aborted, worktree kept
     O->>O: resolve, or resume implementer T2
@@ -310,18 +310,18 @@ sequenceDiagram
 Result: one squashed commit per task on `F`; the shipper only pushes and opens
 the PR.
 
-### `orch wt` (verified in P0)
+### `orc wt` (verified in P0)
 
-`orch wt` (`scripts/orch-wt.mjs`) wraps worktrunk so the agent never composes
-these by hand. The SessionStart hook prints the absolute path of `orch`, which
+`orc wt` (`scripts/orc-wt.mjs`) wraps worktrunk so the agent never composes
+these by hand. The SessionStart hook prints the absolute path of `orc`, which
 works on both harnesses.
 
 | Command | Does |
 |---|---|
-| `orch wt new <F> <T>… [--yes]` | ignores `.worktrees/` via `.git/info/exclude`, then `wt --config-set 'worktree-path=".worktrees/{{ branch \| sanitize }}"' switch -c <F>--<T> --base <F> --no-cd --format=json`; prints `[{task, branch, path}]` |
-| `orch wt merge <F> <T> --message <msg> [--yes]` | commits with the orchestrator's message (squashing extra commits), pre-checks with `git merge-tree --write-tree`, then `wt merge <F> --no-commit`; prints `merged` with the commit, or `conflict` with files (exit 2, rebase aborted) |
-| `orch wt remove <F> <T> [--yes]` | abandons a task: `wt remove <F>--<T> --foreground -D -f`, even when dirty or unmerged; prints `removed` |
-| `orch wt list <F>` | prints `[{task, branch, path}]` for the worktrees whose branch is `<F>--<task>` |
+| `orc wt new <F> <T>… [--yes]` | ignores `.worktrees/` via `.git/info/exclude`, then `wt --config-set 'worktree-path=".worktrees/{{ branch \| sanitize }}"' switch -c <F>--<T> --base <F> --no-cd --format=json`; prints `[{task, branch, path}]` |
+| `orc wt merge <F> <T> --message <msg> [--yes]` | commits with the orchestrator's message (squashing extra commits), pre-checks with `git merge-tree --write-tree`, then `wt merge <F> --no-commit`; prints `merged` with the commit, or `conflict` with files (exit 2, rebase aborted) |
+| `orc wt remove <F> <T> [--yes]` | abandons a task: `wt remove <F>--<T> --foreground -D -f`, even when dirty or unmerged; prints `removed` |
+| `orc wt list <F>` | prints `[{task, branch, path}]` for the worktrees whose branch is `<F>--<task>` |
 
 Design notes from P0:
 
@@ -379,14 +379,14 @@ critical rules instead of relying on hooks alone.
 | Capability | Claude Code | Codex CLI | Orchestra approach |
 |---|---|---|---|
 | Plugin manifest | `.claude-plugin/plugin.json` | `.codex-plugin/plugin.json` (also reads Claude's) | ship both |
-| Agents in plugin | `agents/*.md` | not supported | generate TOML; `orch codex` passes `-c agents.<n>.config_file=…` |
-| Agent addressing | `orch:<role>` (bare name not found) | bare `<role>`; unknown name silently falls back | rules name both forms |
+| Agents in plugin | `agents/*.md` | not supported | generate TOML; `orc codex` passes `-c agents.<n>.config_file=…` |
+| Agent addressing | `orc:<role>` (bare name not found) | bare `<role>`; unknown name silently falls back | rules name both forms |
 | Spawn | Agent tool, parallel in one message | `spawn_agent` + `wait_agent`, only when told | dispatch skill + per-harness reference |
 | Per-agent tools | `tools` / `disallowedTools` | `sandbox_mode` only | allowlists on Claude, read-only sandbox on Codex |
 | Session context | SessionStart `additionalContext` | same contract, hooks need trust | one `hooks.json` |
 | Worktree per subagent | `isolation: worktree` | none; sandbox blocks `.git` writes | worktrunk on both; Codex adds `--add-dir <repo>/.git` |
-| `agent_type` in hooks | `orch:<role>` | `<role>` | hooks strip the `<plugin>:` prefix |
-| MCP servers | `--mcp-config=<json>` per run | `-c mcp_servers.<n>.*` per run | launchers inject `cocoindex-code` when `ccc` is on `PATH` and the git root is indexed; `ORCH_CCC=0` disables |
+| `agent_type` in hooks | `orc:<role>` | `<role>` | hooks strip the `<plugin>:` prefix |
+| MCP servers | `--mcp-config=<json>` per run | `-c mcp_servers.<n>.*` per run | launchers inject `cocoindex-code` when `ccc` is on `PATH` and the git root is indexed; `ORC_CCC=0` disables |
 | Plugin dependencies | `dependencies` | none | ponytail declared on Claude, documented on Codex |
 
 ## 11. Quality strategy
@@ -399,7 +399,7 @@ critical rules instead of relying on hooks alone.
 | Lint (Markdown) | markdownlint-cli2 | no diagnostics |
 | Plugin manifest | `claude plugin validate .` | passes |
 | Generated adapters | `gen-codex-agents --check` (P3) | no diff |
-| Behaviour | `npm run eval` / `orch eval` (`claude plugin eval`, manual, costs money) | delegate / don't-delegate / batch / parallel cases beat baseline |
+| Behaviour | `npm run eval` / `orc eval` (`claude plugin eval`, manual, costs money) | delegate / don't-delegate / batch / parallel cases beat baseline |
 | Benchmark | `npm run eval:bench` (`bench-modules` and the break-even probe `bench-large`, outcome graders only incl. hidden tests; manual, about $3 and $5 per full run; [results](research/benchmarks.md)) | reported, not gated: score, wall-clock and cost Δ vs baseline |
 
 Hook scripts are small exported pure functions behind a thin `main`, so
@@ -412,21 +412,21 @@ All open questions were tested against real CLIs on 2026-10-12
 
 | ID | Result | Consequence |
 |---|---|---|
-| W1–W5 | pass | `orch wt` command shapes above |
+| W1–W5 | pass | `orc wt` command shapes above |
 | C1 | pass with `-c agents.<n>.config_file` (or a trusted project) | no Codex install step |
 | C2 | fails by default | Codex launcher adds `--add-dir <repo>/.git` |
 | C3 | partial: hooks need trust (or `--dangerously-bypass-hook-trust`) | skills and agent TOMLs restate critical rules |
 | K1 | pass, needs `ToolSearch` alongside MCP tools | kept in scoper's allowlist |
-| K2 | pass, `agent_type` = `orch:<role>` incl. PreToolUse in subagents | per-role guard hook |
+| K2 | pass, `agent_type` = `orc:<role>` incl. PreToolUse in subagents | per-role guard hook |
 | K3 | pass, one retry with `stop_hook_active` | implementer evidence gate |
-| K4 | pass with prefix only | rules use `orch:<role>` on Claude |
+| K4 | pass with prefix only | rules use `orc:<role>` on Claude |
 
 | Phase | Scope | State |
 |---|---|---|
 | P0 | Verify the questions above | done |
 | P1 | Tooling, manifests, agents, rules, SessionStart hook | done |
-| P2 | `plan` + `dispatch` skills, worktree helper (now `orch wt`), guard and gate hooks | done |
-| P3 | Codex adapter: generator, launcher (now `orch codex`) | done |
+| P2 | `plan` + `dispatch` skills, worktree helper (now `orc wt`), guard and gate hooks | done |
+| P3 | Codex adapter: generator, launcher (now `orc codex`) | done |
 | P4 | Evals, `claude plugin tag`, public release | done (v0.2.0) |
-| P5 | Unified `orch` CLI (`orch claude \| codex \| wt \| doctor \| eval`), npm package; dotfiles drop the `--wf` wrappers ([#1](https://github.com/crafts69guy/orchestra/issues/1)) | done (v0.3.0) |
+| P5 | Unified `orc` CLI (`orc claude \| codex \| wt \| doctor \| eval`), npm package; dotfiles drop the `--wf` wrappers ([#1](https://github.com/crafts69guy/orchestra/issues/1)) | done (v0.3.0) |
 | P6 | Benchmarks (`bench-modules`, `bench-large`), dispatch threshold by task size ([ADR-0006](adr/0006-dispatch-threshold.md)), `batch-small` / `parallel-dispatch` evals | done (v0.4.0) |

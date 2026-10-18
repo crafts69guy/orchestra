@@ -315,7 +315,7 @@ test('run: text output, json output, usage errors and exit codes', () => {
   for (const bad of [['--nope'], ['--scope', 'x'], ['--scope']]) {
     const r = run(bad, fakeIo({}));
     assert.deepEqual([r.code, r.out], [1, '']);
-    assert.match(r.err, /usage: orch context/);
+    assert.match(r.err, /usage: orc context/);
   }
 });
 

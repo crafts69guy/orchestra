@@ -26,7 +26,7 @@ import {
   which,
 } from '../hooks/session-start.mjs';
 
-const tmp = mkdtempSync(join(tmpdir(), 'orch-'));
+const tmp = mkdtempSync(join(tmpdir(), 'orc-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
 
 function fixtureRoot(name, rules) {
@@ -39,7 +39,7 @@ function fixtureRoot(name, rules) {
 function harness(overrides = {}) {
   const out = { stdout: '', stderr: '' };
   const deps = {
-    env: { ORCH: '1', PATH: '/bin' },
+    env: { ORC: '1', PATH: '/bin' },
     root: fixtureRoot('default', '# RULES\n'),
     read: undefined,
     cwd: '/work',
@@ -87,9 +87,9 @@ test('which finds executables on PATH only', () => {
 });
 
 test('buildContext appends the worktrunk warning only when wt is missing', () => {
-  const cli = 'orch CLI: /p/bin/orch (use `/p/bin/orch wt new|merge|list`)\n';
-  assert.equal(buildContext('# R\n', true, '/p/bin/orch'), `# R\n\n${cli}`);
-  assert.equal(buildContext('# R\n\n', false, '/p/bin/orch'), `# R\n\n${cli}\n${WT_WARNING}\n`);
+  const cli = 'orc CLI: /p/bin/orc (use `/p/bin/orc wt new|merge|list`)\n';
+  assert.equal(buildContext('# R\n', true, '/p/bin/orc'), `# R\n\n${cli}`);
+  assert.equal(buildContext('# R\n\n', false, '/p/bin/orc'), `# R\n\n${cli}\n${WT_WARNING}\n`);
   assert.match(WT_WARNING, /brew install worktrunk/);
 });
 
@@ -99,22 +99,22 @@ test('formatOutput emits the SessionStart hookSpecificOutput shape', () => {
   });
 });
 
-test('run is silent and exits 0 unless ORCH=1', () => {
-  for (const env of [{}, { ORCH: '0' }, { ORCH: 'true' }]) {
+test('run is silent and exits 0 unless ORC=1', () => {
+  for (const env of [{}, { ORC: '0' }, { ORC: 'true' }]) {
     const { deps, out } = harness({ env });
     assert.equal(run(deps), 0);
     assert.deepEqual(out, { stdout: '', stderr: '' });
   }
 });
 
-test('run injects the rules when ORCH=1 and wt is present', () => {
+test('run injects the rules when ORC=1 and wt is present', () => {
   const { deps, out } = harness({
     hasCommand: (name, pathEnv) => name === 'wt' && pathEnv === '/bin',
   });
   assert.equal(run(deps), 0);
   const ctx = JSON.parse(out.stdout).hookSpecificOutput.additionalContext;
-  const orch = join(deps.root, 'bin', 'orch');
-  assert.equal(ctx, `# RULES\n\norch CLI: ${orch} (use \`${orch} wt new|merge|list\`)\n`);
+  const orc = join(deps.root, 'bin', 'orc');
+  assert.equal(ctx, `# RULES\n\norc CLI: ${orc} (use \`${orc} wt new|merge|list\`)\n`);
   assert.equal(out.stderr, '');
 });
 
@@ -123,7 +123,7 @@ test('run warns about worktrunk when wt is missing', () => {
   assert.equal(run(deps), 0);
   const ctx = JSON.parse(out.stdout).hookSpecificOutput.additionalContext;
   assert.ok(
-    ctx.startsWith('# RULES') && ctx.includes('orch CLI: ') && ctx.endsWith(`${WT_WARNING}\n`),
+    ctx.startsWith('# RULES') && ctx.includes('orc CLI: ') && ctx.endsWith(`${WT_WARNING}\n`),
   );
 });
 
@@ -153,22 +153,22 @@ function fakeProcess(env) {
 
 test('main wires real fs and process streams against a plugin root', () => {
   const root = fixtureRoot('main-ok', '# MAIN\n');
-  const ok = fakeProcess({ ORCH: '1', PATH: '' });
+  const ok = fakeProcess({ ORC: '1', PATH: '' });
   main(ok, pathToFileURL(join(root, 'hooks', 'session-start.mjs')).href);
   assert.equal(ok.exitCode, 0);
   assert.match(ok.out, /# MAIN/);
   assert.match(ok.out, /worktrunk/);
 
-  const bad = fakeProcess({ ORCH: '1', PATH: '' });
+  const bad = fakeProcess({ ORC: '1', PATH: '' });
   main(bad, pathToFileURL(join(tmp, 'nowhere', 'hooks', 'session-start.mjs')).href);
   assert.equal(bad.exitCode, 0);
   assert.equal(bad.out, '');
   assert.match(bad.err, /not found/);
 });
 
-test('script entrypoint exits 0 and prints nothing without ORCH', () => {
+test('script entrypoint exits 0 and prints nothing without ORC', () => {
   const script = fileURLToPath(new URL('../hooks/session-start.mjs', import.meta.url));
-  const { ORCH: _drop, ...env } = process.env;
+  const { ORC: _drop, ...env } = process.env;
   const res = spawnSync(process.execPath, [script], { env, encoding: 'utf8' });
   assert.equal(res.status, 0);
   assert.equal(res.stdout, '');
@@ -189,27 +189,27 @@ test('hook runs when invoked through a symlinked plugin dir', () => {
   const link = join(tmp, 'plugin-link');
   symlinkSync(fileURLToPath(new URL('..', import.meta.url)), link);
   const r = spawnSync(process.execPath, [join(link, 'hooks', 'session-start.mjs')], {
-    env: { ...process.env, ORCH: '1' },
+    env: { ...process.env, ORC: '1' },
     encoding: 'utf8',
   });
   assert.equal(r.status, 0);
   assert.match(r.stdout, /hookSpecificOutput/);
 });
 
-test('buildContext keeps docs lines without their marker, or drops them when ORCH_DOCS is off', () => {
-  const rules = '# R\nkeep\nDocs line. <!-- orch:docs -->\n  Indented. <!-- orch:docs -->\nend\n';
-  const cli = '\n\norch CLI: /p (use `/p wt new|merge|list`)\n';
+test('buildContext keeps docs lines without their marker, or drops them when ORC_DOCS is off', () => {
+  const rules = '# R\nkeep\nDocs line. <!-- orc:docs -->\n  Indented. <!-- orc:docs -->\nend\n';
+  const cli = '\n\norc CLI: /p (use `/p wt new|merge|list`)\n';
   assert.equal(buildContext(rules, true, '/p'), `# R\nkeep\nDocs line.\n  Indented.\nend${cli}`);
   assert.equal(buildContext(rules, true, '/p', { docs: false }), `# R\nkeep\nend${cli}`);
 });
 
-test('run drops docs lines only when ORCH_DOCS=0', () => {
-  const rules = 'a\nb <!-- orch:docs -->\n';
+test('run drops docs lines only when ORC_DOCS=0', () => {
+  const rules = 'a\nb <!-- orc:docs -->\n';
   const ctx = (envDocs) => {
     const root = fixtureRoot(`docs-${envDocs}`, rules);
     let out = '';
     run({
-      env: { ORCH: '1', PATH: '', ORCH_DOCS: envDocs },
+      env: { ORC: '1', PATH: '', ORC_DOCS: envDocs },
       root,
       read: readFileSync,
       cwd: '/work',
@@ -225,13 +225,13 @@ test('run drops docs lines only when ORCH_DOCS=0', () => {
   assert.doesNotMatch(ctx('0'), /\nb\b/);
 });
 
-test('run keeps high lines only when ORCH_LEVEL=high', () => {
+test('run keeps high lines only when ORC_LEVEL=high', () => {
   const ctx = (level) => {
     const { deps, out } = harness({
-      root: fixtureRoot(`high-${level}`, 'a\nb <!-- orch:high -->\n'),
+      root: fixtureRoot(`high-${level}`, 'a\nb <!-- orc:high -->\n'),
       read: readFileSync,
     });
-    deps.env.ORCH_LEVEL = level;
+    deps.env.ORC_LEVEL = level;
     run(deps);
     return JSON.parse(out.stdout).hookSpecificOutput.additionalContext;
   };
@@ -241,14 +241,14 @@ test('run keeps high lines only when ORCH_LEVEL=high', () => {
 });
 
 test('applyMarkers drops a line when its flag is falsy and strips the marker otherwise', () => {
-  const rules = 'a\nb <!-- orch:ccc -->\nc <!-- orch:docs -->\n';
+  const rules = 'a\nb <!-- orc:ccc -->\nc <!-- orc:docs -->\n';
   assert.equal(applyMarkers(rules, { ccc: true, docs: false }), 'a\nb\n');
   assert.equal(applyMarkers(rules, {}), 'a\n');
   assert.equal(buildContext(rules, true, '/p').includes('b'), false);
 });
 
 test('run keeps ccc lines only when ccc is enabled for the git root', () => {
-  const rules = 'a\nb <!-- orch:ccc -->\n';
+  const rules = 'a\nb <!-- orc:ccc -->\n';
   const ctx = (exists) => {
     const { deps, out } = harness({
       root: fixtureRoot(`ccc-${exists}`, rules),
@@ -263,31 +263,31 @@ test('run keeps ccc lines only when ccc is enabled for the git root', () => {
   assert.doesNotMatch(ctx(false), /\nb\b/);
 });
 
-test('run is silent for a herdr pane worker (ORCH_ROLE set)', () => {
-  const { deps, out } = harness({ env: { ORCH: '1', ORCH_ROLE: 'implementer', PATH: '/bin' } });
+test('run is silent for a herdr pane worker (ORC_ROLE set)', () => {
+  const { deps, out } = harness({ env: { ORC: '1', ORC_ROLE: 'implementer', PATH: '/bin' } });
   assert.equal(run(deps), 0);
   assert.deepEqual(out, { stdout: '', stderr: '' });
 });
 
-test('run keeps panes lines and names orch pane only with ORCH_PANES=1 inside herdr', () => {
+test('run keeps panes lines and names orc pane only with ORC_PANES=1 inside herdr', () => {
   const ctx = (env) => {
     const { deps, out } = harness({
-      root: fixtureRoot('panes', 'a\nb <!-- orch:panes -->\n'),
+      root: fixtureRoot('panes', 'a\nb <!-- orc:panes -->\n'),
       read: readFileSync,
     });
     Object.assign(deps.env, env);
     run(deps);
     return JSON.parse(out.stdout).hookSpecificOutput.additionalContext;
   };
-  const on = ctx({ ORCH_PANES: '1', HERDR_ENV: '1' });
+  const on = ctx({ ORC_PANES: '1', HERDR_ENV: '1' });
   assert.match(on, /\nb\n/);
   assert.match(
     on,
-    /bin\/orch wt new\|merge\|list` and `\S+bin\/orch pane start\|wait\|prompt\|close`\)/,
+    /bin\/orc wt new\|merge\|list` and `\S+bin\/orc pane start\|wait\|prompt\|close`\)/,
   );
-  for (const env of [{ ORCH_PANES: '1' }, { HERDR_ENV: '1' }]) {
+  for (const env of [{ ORC_PANES: '1' }, { HERDR_ENV: '1' }]) {
     const off = ctx(env);
     assert.doesNotMatch(off, /\nb\b/);
-    assert.doesNotMatch(off, /orch pane/);
+    assert.doesNotMatch(off, /orc pane/);
   }
 });

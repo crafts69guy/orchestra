@@ -1,6 +1,6 @@
 ---
 name: dispatch
-description: "orch workflow: run independent substantial tasks from .scratch/<feature>/plan.md in parallel, one implementer per git worktree (worktrunk), then merge them into the feature branch one at a time."
+description: "orc workflow: run independent substantial tasks from .scratch/<feature>/plan.md in parallel, one implementer per git worktree (worktrunk), then merge them into the feature branch one at a time."
 ---
 
 # Dispatch
@@ -9,9 +9,9 @@ Run the plan in waves. Harness-specific spawn syntax:
 [Claude Code](references/claude.md) · [Codex](references/codex.md).
 Pane mode (herdr pane workers instead of subagents): [herdr](references/herdr.md).
 
-`orch` is the CLI shipped with this plugin; the session context names its
+`orc` is the CLI shipped with this plugin; the session context names its
 absolute path. Use that path where the plugin's `bin/` is not on `PATH` (Codex).
-`orch wt` wraps worktrunk (`wt`) and prints JSON.
+`orc wt` wraps worktrunk (`wt`) and prints JSON.
 
 ## Preconditions
 
@@ -26,7 +26,7 @@ absolute path. Use that path where the plugin's `bin/` is not on `PATH` (Codex).
    disjoint. At most 4 per wave; queue the rest. `small` tasks are never
    dispatched: run them as one batched implementer task on `F`, before any wave
    that depends on them.
-2. **Create** worktrees: `orch wt new <F> <T1> <T2> …` → JSON list of
+2. **Create** worktrees: `orc wt new <F> <T1> <T2> …` → JSON list of
    `{task, branch, path}`.
 3. **Spawn** one implementer per task, all in the **same message** so they run
    in parallel. Brief each with: plan path + task id, its worktree `path`
@@ -36,7 +36,7 @@ absolute path. Use that path where the plugin's `bin/` is not on `PATH` (Codex).
 5. **Review** each diff (`git -C <path> diff`). Send defects back to the same
    agent.
 6. **Merge one task at a time:**
-   `orch wt merge <F> <T> --message "<conventional commit message>"`.
+   `orc wt merge <F> <T> --message "<conventional commit message>"`.
    The message is the full commit message: include any trailers your
    instructions require (e.g. `Co-Authored-By`). Never rewrite merged commits
    afterwards.

@@ -15,13 +15,13 @@ import {
   splitPanes,
   splitYolo,
   USAGE,
-} from '../scripts/orch.mjs';
-import { agentName } from '../scripts/orch-pane.mjs';
+} from '../scripts/orc.mjs';
+import { agentName } from '../scripts/orc-pane.mjs';
 
-const tmp = mkdtempSync(join(tmpdir(), 'orch-cli-'));
+const tmp = mkdtempSync(join(tmpdir(), 'orc-cli-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
 
-const BIN = fileURLToPath(new URL('../bin/orch', import.meta.url));
+const BIN = fileURLToPath(new URL('../bin/orc', import.meta.url));
 const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url))).version;
 
 /** Fake io: records output and spawns; `spawnResult` is what every spawn returns. */
@@ -76,7 +76,7 @@ test('claude injects ccc when enabled', () => {
 test('ccc subcommand dispatches to ccc init', () => {
   const io = fakeIo();
   assert.equal(run(['ccc'], io), 1);
-  assert.match(io.err, /usage: orch ccc init/);
+  assert.match(io.err, /usage: orc ccc init/);
 });
 
 test('update upgrades cocoindex-code only when uv lists it', () => {
@@ -104,13 +104,13 @@ test('claudeArgs defaults to opus, keeps a user model, maps --yolo', () => {
   assert.deepEqual(claudeArgs(['--yolo']), ['--model', 'opus', '--dangerously-skip-permissions']);
 });
 
-test('claude spawns with ORCH=1, never bypasses permissions by default, propagates status', () => {
+test('claude spawns with ORC=1, never bypasses permissions by default, propagates status', () => {
   const io = fakeIo({ spawnResult: { status: 5 } });
   assert.equal(run(['claude', 'hi'], io), 5);
   const [{ cmd, args, opts }] = io.spawned;
   assert.equal(cmd, 'claude');
   assert.deepEqual(args, ['--model', 'opus', 'hi']);
-  assert.deepEqual(opts.env, { PATH: '/bin', ORCH: '1', ORCH_ROLE: '' });
+  assert.deepEqual(opts.env, { PATH: '/bin', ORC: '1', ORC_ROLE: '' });
 });
 
 test('splitLevel strips --level in both forms', () => {
@@ -123,21 +123,21 @@ test('splitLevel strips --level in both forms', () => {
   assert.deepEqual(splitLevel(['--level']), { level: '', rest: [] });
 });
 
-test('claude --level sets ORCH_LEVEL and stays out of argv; no flag leaves env alone', () => {
+test('claude --level sets ORC_LEVEL and stays out of argv; no flag leaves env alone', () => {
   const io = fakeIo();
   assert.equal(run(['claude', '--level', 'high', 'hi'], io), 0);
   assert.deepEqual(io.spawned[0].args, ['--model', 'opus', 'hi']);
-  assert.equal(io.spawned[0].opts.env.ORCH_LEVEL, 'high');
+  assert.equal(io.spawned[0].opts.env.ORC_LEVEL, 'high');
   const plain = fakeIo();
   run(['claude'], plain);
-  assert.equal('ORCH_LEVEL' in plain.spawned[0].opts.env, false);
+  assert.equal('ORC_LEVEL' in plain.spawned[0].opts.env, false);
 });
 
 test('claude --level rejects unknown or missing values without spawning', () => {
   for (const a of [['--level', 'max'], ['--level=x'], ['--level']]) {
     const io = fakeIo();
     assert.equal(run(['claude', ...a], io), 1);
-    assert.match(io.err, /orch: unknown level \S* \(default\|high\)/);
+    assert.match(io.err, /orc: unknown level \S* \(default\|high\)/);
     assert.equal(io.spawned.length, 0);
   }
 });
@@ -174,9 +174,9 @@ test('codex runs the launcher; --yolo becomes the bypass flag right before the u
   assert.equal(run(['codex', '--yolo', 'exec', 'hi'], io), 3);
   const [{ cmd, args, opts }] = io.spawned;
   assert.equal(cmd, 'codex');
-  assert.match(args[1], /orch CLI: .*bin\/orch/);
+  assert.match(args[1], /orc CLI: .*bin\/orc/);
   assert.deepEqual(args.slice(2), ['--dangerously-bypass-approvals-and-sandbox', 'exec', 'hi']);
-  assert.equal(opts.env.ORCH, '1');
+  assert.equal(opts.env.ORC, '1');
   run(['codex', 'exec'], io);
   assert.ok(!io.spawned[1].args.includes('--dangerously-bypass-approvals-and-sandbox'));
 });
@@ -184,7 +184,7 @@ test('codex runs the launcher; --yolo becomes the bypass flag right before the u
 test('wt prints the JSON result and returns its code', () => {
   const io = fakeIo({ wtDeps: {} });
   assert.equal(run(['wt', 'bogus'], io), 1);
-  assert.match(JSON.parse(io.out).stderr, /usage: orch wt/);
+  assert.match(JSON.parse(io.out).stderr, /usage: orc wt/);
 });
 
 test('doctor prints one line per check and returns its code', () => {
@@ -213,7 +213,7 @@ test('doctor --json prints schemaVersion and checks with the same code; bad args
   const bad = fakeIo({ doctorDeps });
   assert.equal(run(['doctor', '--bogus'], bad), 1);
   assert.equal(bad.out, '');
-  assert.equal(bad.err, 'usage: orch doctor [--json]\n');
+  assert.equal(bad.err, 'usage: orc doctor [--json]\n');
 });
 
 test('status wires io into the collector; warnings and errors go to stderr', () => {
@@ -231,7 +231,7 @@ test('status wires io into the collector; warnings and errors go to stderr', () 
   });
   assert.equal(run(['status'], io), 0);
   assert.equal(io.out, 'f/T1  -  -\n');
-  assert.equal(io.err, 'orch status: wt list failed; worktrees unknown: no wt\n');
+  assert.equal(io.err, 'orc status: wt list failed; worktrees unknown: no wt\n');
   const json = fakeIo({ exec: () => ({ status: 128, stdout: '', stderr: '' }) });
   assert.equal(run(['status', '--json'], json), 1);
   assert.equal(json.out, '');
@@ -262,7 +262,7 @@ test('update runs npm, claude and codex steps; skips npm in a checkout and harne
     [
       'npm install -g --prefer-online @crafts69guy/orchestra@latest',
       'claude plugin marketplace update orchestra',
-      'claude plugin update orch@orchestra',
+      'claude plugin update orc@orchestra',
       'codex plugin marketplace upgrade orchestra',
     ],
   );
@@ -337,7 +337,7 @@ test('unknown or missing subcommand prints usage on stderr and exits 1', () => {
   }
   const io = fakeIo();
   run(['bogus'], io);
-  assert.match(io.err, /^orch: unknown command bogus\n/);
+  assert.match(io.err, /^orc: unknown command bogus\n/);
 });
 
 test('main wires the real io: --version reads package.json', () => {
@@ -345,7 +345,7 @@ test('main wires the real io: --version reads package.json', () => {
   let onError;
   const exits = [];
   const proc = {
-    argv: ['node', 'orch', '--version'],
+    argv: ['node', 'orc', '--version'],
     env: {},
     cwd: () => tmp,
     exit: (code) => exits.push(code),
@@ -368,11 +368,11 @@ test('main wires the real io: --version reads package.json', () => {
   assert.throws(() => onError(Object.assign(new Error('boom'), { code: 'EIO' })), /boom/);
 });
 
-test('bin/orch claude runs a fake claude end to end; missing claude exits 127', () => {
+test('bin/orc claude runs a fake claude end to end; missing claude exits 127', () => {
   const bin = join(tmp, 'fakebin');
   const log = join(tmp, 'claude.log');
   mkdirSync(bin);
-  writeFileSync(join(bin, 'claude'), `#!/bin/sh\nprintf '%s\\n' "$ORCH" "$@" > "${log}"\nexit 4\n`);
+  writeFileSync(join(bin, 'claude'), `#!/bin/sh\nprintf '%s\\n' "$ORC" "$@" > "${log}"\nexit 4\n`);
   chmodSync(join(bin, 'claude'), 0o755);
   const r = spawnSync(process.execPath, [BIN, 'claude', '--yolo', '-p', 'hi'], {
     env: { PATH: bin },
@@ -408,20 +408,20 @@ test('context prints the audit and returns its code; usage goes to stderr', () =
   assert.deepEqual(JSON.parse(ok.out), { schemaVersion: 1, sources: [], findings: [] });
   const bad = fakeIo();
   assert.equal(run(['context', '--bogus'], bad), 1);
-  assert.match(bad.err, /usage: orch context/);
+  assert.match(bad.err, /usage: orc context/);
 });
 
-test('splitPanes strips --panes; claude --panes sets ORCH_PANES and stays out of argv', () => {
+test('splitPanes strips --panes; claude --panes sets ORC_PANES and stays out of argv', () => {
   assert.deepEqual(splitPanes(['-p', '--panes', 'hi']), { panes: true, rest: ['-p', 'hi'] });
   assert.deepEqual(splitPanes(['hi']), { panes: false, rest: ['hi'] });
   const io = fakeIo();
   assert.equal(run(['claude', '--panes', '--level', 'high', 'hi'], io), 0);
   assert.deepEqual(io.spawned[0].args, ['--model', 'opus', 'hi']);
-  assert.equal(io.spawned[0].opts.env.ORCH_PANES, '1');
-  assert.equal(io.spawned[0].opts.env.ORCH_ROLE, '', 'a pane worker role never leaks');
+  assert.equal(io.spawned[0].opts.env.ORC_PANES, '1');
+  assert.equal(io.spawned[0].opts.env.ORC_ROLE, '', 'a pane worker role never leaks');
   const plain = fakeIo();
   run(['claude'], plain);
-  assert.equal('ORCH_PANES' in plain.spawned[0].opts.env, false);
+  assert.equal('ORC_PANES' in plain.spawned[0].opts.env, false);
 });
 
 test('pane prints the JSON result and returns its code', () => {
@@ -452,7 +452,7 @@ test('pane prints the JSON result and returns its code', () => {
   assert.deepEqual(JSON.parse(io.out), {
     task: 'T',
     state: 'idle',
-    report: '/work/wt/.orch/report.md',
+    report: '/work/wt/.orc/report.md',
     evidence: true,
   });
   const name = agentName('T', '/work/wt');
@@ -463,5 +463,5 @@ test('pane prints the JSON result and returns its code', () => {
   ]);
   io.out = '';
   run(['pane', 'prompt', 'T', '--path', 'wt', '--text', 'x'], io);
-  assert.deepEqual(unlinked, ['/work/wt/.orch/report.md']);
+  assert.deepEqual(unlinked, ['/work/wt/.orc/report.md']);
 });

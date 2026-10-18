@@ -5,16 +5,16 @@ import { pluginRoot, which } from '../hooks/session-start.mjs';
 import { run as ccc, cccEnabled, claudeMcpArg } from './ccc.mjs';
 import { run as context } from './context.mjs';
 import { run as doctor } from './doctor.mjs';
-import { run as codex, gitCommonDir, spawnExit } from './orch-codex.mjs';
-import { run as pane } from './orch-pane.mjs';
-import { exec, run as wt, realDeps as wtDeps } from './orch-wt.mjs';
+import { run as codex, gitCommonDir, spawnExit } from './orc-codex.mjs';
+import { run as pane } from './orc-pane.mjs';
+import { exec, run as wt, realDeps as wtDeps } from './orc-wt.mjs';
 import { run as status } from './status.mjs';
 
-export const USAGE = `usage: orch <command> [args]
+export const USAGE = `usage: orc <command> [args]
 
 commands:
-  claude [--yolo] [--level high] [--panes] [args]   run claude with the orch workflow (ORCH=1, --model opus by default)
-  codex [--yolo] [args]    run codex with the orch workflow
+  claude [--yolo] [--level high] [--panes] [args]   run claude with the orc workflow (ORC=1, --model opus by default)
+  codex [--yolo] [args]    run codex with the orc workflow
   wt new|merge|remove|list ...   manage task worktrees (prints JSON)
   pane start|wait|prompt|close ...   drive herdr pane workers (prints JSON; inside herdr only)
   ccc init [--force]       index this repo for semantic search (cocoindex-code)
@@ -28,21 +28,21 @@ commands:
 
 --yolo bypasses the harness's permission prompts and sandbox; never the default.
 --level high runs implementer on opus, scoper and shipper on sonnet (default: agent defaults).
---panes runs dispatch's implementers as herdr pane workers (ORCH_PANES=1; needs herdr).
+--panes runs dispatch's implementers as herdr pane workers (ORC_PANES=1; needs herdr).
 `;
 
-/** Splits orch's own `--yolo` flag out of the args passed through to the harness. */
+/** Splits orc's own `--yolo` flag out of the args passed through to the harness. */
 export function splitYolo(args) {
   return { yolo: args.includes('--yolo'), rest: args.filter((a) => a !== '--yolo') };
 }
 
-/** Splits orch's own `--panes` flag out of the args passed through to the harness. */
+/** Splits orc's own `--panes` flag out of the args passed through to the harness. */
 export function splitPanes(args) {
   return { panes: args.includes('--panes'), rest: args.filter((a) => a !== '--panes') };
 }
 
 /**
- * Splits orch's `--level <v>` / `--level=<v>` out of the args. `level` is undefined when absent and
+ * Splits orc's `--level <v>` / `--level=<v>` out of the args. `level` is undefined when absent and
  * '' when the flag has no value; the last occurrence wins.
  */
 export function splitLevel(args) {
@@ -91,7 +91,7 @@ function hasCcc(io) {
 }
 
 /**
- * Steps of `orch update` as `[cmd, args]`. The npm step is skipped in a git checkout (update it
+ * Steps of `orc update` as `[cmd, args]`. The npm step is skipped in a git checkout (update it
  * with `git pull`); a harness step is skipped unless that harness has the `orchestra` marketplace.
  */
 export function updateSteps(io) {
@@ -102,7 +102,7 @@ export function updateSteps(io) {
     ...(hasOrchestra(io, 'claude')
       ? [
           ['claude', ['plugin', 'marketplace', 'update', 'orchestra']],
-          ['claude', ['plugin', 'update', 'orch@orchestra']],
+          ['claude', ['plugin', 'update', 'orc@orchestra']],
         ]
       : []),
     ...(hasOrchestra(io, 'codex')
@@ -118,17 +118,17 @@ export const commands = {
     const { level, rest: afterLevel } = splitLevel(args);
     const { panes, rest } = splitPanes(afterLevel);
     if (level !== undefined && level !== 'default' && level !== 'high') {
-      io.stderr(`orch: unknown level ${level} (default|high)\n`);
+      io.stderr(`orc: unknown level ${level} (default|high)\n`);
       return 1;
     }
     return spawnExit(
       io.spawn('claude', claudeArgs(rest, cccEnabled(io.env, io.cwd, io)), {
         env: {
           ...io.env,
-          ORCH: '1',
-          ORCH_ROLE: '', // a pane worker's role must not leak into a new orchestrator
-          ...(level === undefined ? {} : { ORCH_LEVEL: level }),
-          ...(panes ? { ORCH_PANES: '1' } : {}),
+          ORC: '1',
+          ORC_ROLE: '', // a pane worker's role must not leak into a new orchestrator
+          ...(level === undefined ? {} : { ORC_LEVEL: level }),
+          ...(panes ? { ORC_PANES: '1' } : {}),
         },
       }),
       'claude',
@@ -167,7 +167,7 @@ export const commands = {
   doctor(args, io) {
     const json = args.includes('--json');
     if (args.some((a) => a !== '--json')) {
-      io.stderr('usage: orch doctor [--json]\n');
+      io.stderr('usage: orc doctor [--json]\n');
       return 1;
     }
     const { code, lines, checks } = doctor(io.doctorDeps);
@@ -198,7 +198,7 @@ export const commands = {
   /** Runs every step even after a failure; returns the first non-zero code. */
   update(_args, io) {
     if (io.exists(join(io.root, '.git'))) {
-      io.stderr(`orch: ${io.root} is a git checkout; skipping npm (run git pull there)\n`);
+      io.stderr(`orc: ${io.root} is a git checkout; skipping npm (run git pull there)\n`);
     }
     let code = 0;
     for (const [cmd, args] of updateSteps(io)) {
@@ -206,13 +206,13 @@ export const commands = {
       const c = spawnExit(io.spawn(cmd, args, { env: io.env }), cmd, io.stderr, 'skipping.');
       if (c !== 0 && code === 0) code = c;
     }
-    if (code === 0) io.stdout('orch: updated; restart Claude Code / Codex sessions to apply\n');
+    if (code === 0) io.stdout('orc: updated; restart Claude Code / Codex sessions to apply\n');
     return code;
   },
   eval(args, io) {
     const script = join(io.root, 'evals', '_support', 'run.sh');
     if (!io.exists(script)) {
-      io.stderr('orch: evals ship with the git checkout only\n');
+      io.stderr('orc: evals ship with the git checkout only\n');
       return 1;
     }
     const r = io.spawn('sh', [script, ...args], { cwd: io.root, env: io.env });
@@ -232,7 +232,7 @@ export function run(argv, io, table = commands) {
     return 0;
   }
   if (!Object.hasOwn(table, cmd)) {
-    io.stderr(`${cmd === undefined ? '' : `orch: unknown command ${cmd}\n`}${USAGE}`);
+    io.stderr(`${cmd === undefined ? '' : `orc: unknown command ${cmd}\n`}${USAGE}`);
     return 1;
   }
   return table[cmd](args, io);
@@ -259,7 +259,7 @@ export function realIo(proc, metaUrl) {
 }
 
 export function main(proc = process, metaUrl = import.meta.url) {
-  // A reader that closed early (`orch context --json | head`) ends the output, not the process.
+  // A reader that closed early (`orc context --json | head`) ends the output, not the process.
   proc.stdout.on('error', (e) => {
     if (e.code !== 'EPIPE') throw e;
     proc.exit(proc.exitCode);

@@ -22,9 +22,9 @@ import {
   realDeps,
   remove,
   run,
-} from '../scripts/orch-wt.mjs';
+} from '../scripts/orc-wt.mjs';
 
-const tmp = mkdtempSync(join(tmpdir(), 'orch-wt-'));
+const tmp = mkdtempSync(join(tmpdir(), 'orc-wt-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
 
 const ok = (stdout = '') => ({ status: 0, stdout, stderr: '' });
@@ -61,7 +61,7 @@ test('exec returns status/stdout and maps spawn failure to 127', () => {
     tmp,
   );
   assert.deepEqual(r, { status: 3, stdout: 'hi\n', stderr: 'e\n' });
-  const missing = exec('orch-no-such-binary', [], tmp);
+  const missing = exec('orc-no-such-binary', [], tmp);
   assert.equal(missing.status, 127);
   assert.match(missing.stderr, /ENOENT/);
 });
@@ -76,7 +76,7 @@ test('ensureIgnored appends to the common-dir info/exclude otherwise', () => {
   const deps = fake({ 'git check-ignore': bad('', 1), 'git rev-parse': ok('.git\n') });
   assert.equal(ensureIgnored(deps, '/r'), null);
   assert.deepEqual(deps.dirs, ['/r/.git/info']);
-  assert.deepEqual(deps.appended, [['/r/.git/info/exclude', '.worktrees/\n.orch/\n']]);
+  assert.deepEqual(deps.appended, [['/r/.git/info/exclude', '.worktrees/\n.orc/\n']]);
 });
 
 test('ensureIgnored appends only the directories not yet ignored', () => {
@@ -86,7 +86,7 @@ test('ensureIgnored appends only the directories not yet ignored', () => {
     'git rev-parse': ok('.git\n'),
   });
   assert.equal(ensureIgnored(deps, '/r'), null);
-  assert.deepEqual(deps.appended, [['/r/.git/info/exclude', '.orch/\n']]);
+  assert.deepEqual(deps.appended, [['/r/.git/info/exclude', '.orc/\n']]);
 });
 
 test('ensureIgnored reports a failing rev-parse', () => {
@@ -311,7 +311,7 @@ test('run dispatches subcommands and rejects bad usage', () => {
   ]) {
     const { code, result } = run(argv, deps, '/r');
     assert.equal(code, 1);
-    assert.match(result.stderr, /usage: orch wt/);
+    assert.match(result.stderr, /usage: orc wt/);
   }
 });
 
@@ -379,11 +379,11 @@ test('integration: new then merge against real git + wt', {
   git(repo, 'commit', '-qm', 'init');
   git(repo, 'switch', '-qc', 'feat');
 
-  const bin = fileURLToPath(new URL('../bin/orch', import.meta.url));
-  const orch = (...args) =>
+  const bin = fileURLToPath(new URL('../bin/orc', import.meta.url));
+  const orc = (...args) =>
     spawnSync(process.execPath, [bin, 'wt', ...args], { cwd: repo, env, encoding: 'utf8' });
 
-  const made = orch('new', 'feat', 'T1', 'T2');
+  const made = orc('new', 'feat', 'T1', 'T2');
   assert.equal(made.status, 0, made.stderr);
   const [t1, t2] = JSON.parse(made.stdout);
   assert.equal(t1.path, join(repo, '.worktrees', 'feat--T1'));
@@ -391,7 +391,7 @@ test('integration: new then merge against real git + wt', {
 
   writeFileSync(join(t1.path, 'b.txt'), 'b\n');
   writeFileSync(join(t2.path, 'a.txt'), 'two\n');
-  const m1 = orch('merge', 'feat', 'T1', '--message', 'feat(t1): add b');
+  const m1 = orc('merge', 'feat', 'T1', '--message', 'feat(t1): add b');
   assert.equal(m1.status, 0, m1.stderr);
   const merged = JSON.parse(m1.stdout);
   assert.equal(merged.status, 'merged');
@@ -402,22 +402,22 @@ test('integration: new then merge against real git + wt', {
   assert.equal(git(repo, 'branch', '--list', 'feat--T1'), '');
 
   // T2 edits a.txt, which nothing else touched: merges cleanly; now force a conflict on a new task.
-  assert.equal(orch('merge', 'feat', 'T2', '--message', 'feat(t2): edit a').status, 0);
+  assert.equal(orc('merge', 'feat', 'T2', '--message', 'feat(t2): edit a').status, 0);
   assert.equal(existsSync(t2.path), false);
-  const [t3] = JSON.parse(orch('new', 'feat', 'T3').stdout);
-  const [t4] = JSON.parse(orch('new', 'feat', 'T4').stdout);
+  const [t3] = JSON.parse(orc('new', 'feat', 'T3').stdout);
+  const [t4] = JSON.parse(orc('new', 'feat', 'T4').stdout);
   writeFileSync(join(t3.path, 'a.txt'), 'three\n');
   writeFileSync(join(t4.path, 'a.txt'), 'four\n');
-  assert.equal(orch('merge', 'feat', 'T3', '--message', 'feat(t3): a').status, 0);
+  assert.equal(orc('merge', 'feat', 'T3', '--message', 'feat(t3): a').status, 0);
   const before = git(repo, 'rev-parse', 'feat');
-  const c = orch('merge', 'feat', 'T4', '--message', 'feat(t4): a');
+  const c = orc('merge', 'feat', 'T4', '--message', 'feat(t4): a');
   assert.equal(c.status, 2, c.stderr);
   assert.deepEqual(JSON.parse(c.stdout), { status: 'conflict', task: 'T4', files: ['a.txt'] });
   assert.equal(git(repo, 'rev-parse', 'feat'), before);
   assert.equal(existsSync(t4.path), true);
 
   // merged worktrees are removed; only the conflicted T4 is left
-  assert.deepEqual(JSON.parse(orch('list', 'feat').stdout), [
+  assert.deepEqual(JSON.parse(orc('list', 'feat').stdout), [
     { task: 'T4', branch: 'feat--T4', path: t4.path },
   ]);
 });

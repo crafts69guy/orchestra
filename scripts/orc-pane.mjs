@@ -2,26 +2,26 @@ import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { hasEvidence } from '../hooks/subagent-stop.mjs';
-import { REPORT_DIR } from './orch-wt.mjs';
+import { REPORT_DIR } from './orc-wt.mjs';
 
 const USAGE =
-  'usage: orch pane start <feature> <task> --path <worktree> --brief <file> [--kind claude|codex] | orch pane wait <task> --path <worktree> [--timeout ms] | orch pane prompt <task> --path <worktree> (--text <t> | --file <f>) | orch pane close <task> --path <worktree>';
-export const GATE_ERROR = 'orch: pane mode needs herdr (HERDR_ENV=1)';
+  'usage: orc pane start <feature> <task> --path <worktree> --brief <file> [--kind claude|codex] | orc pane wait <task> --path <worktree> [--timeout ms] | orc pane prompt <task> --path <worktree> (--text <t> | --file <f>) | orc pane close <task> --path <worktree>';
+export const GATE_ERROR = 'orc: pane mode needs herdr (HERDR_ENV=1)';
 const PROMPT_WAIT = ['--wait', '--until', 'working', '--until', 'blocked', '--timeout', '30000'];
-/** Default `--timeout` (ms) of each `agent wait` in `orch pane wait`: 30 minutes. */
+/** Default `--timeout` (ms) of each `agent wait` in `orc pane wait`: 30 minutes. */
 export const WAIT_TIMEOUT = '1800000';
 const REPORT_FIELDS = '(Status, Changes, Validation, Notes, Docs)';
 
 const fail = (stderr, extra = {}) => ({ code: 1, result: { status: 'error', ...extra, stderr } });
 
 /**
- * herdr agent name for a task in a worktree: `orch-<first 6 hex of sha1(absPath)>-<task>`, the
+ * herdr agent name for a task in a worktree: `orc-<first 6 hex of sha1(absPath)>-<task>`, the
  * task lowercased with other chars as `-`, at most 32 chars. Unique per worktree, so a re-run of
  * `start` on the same worktree finds the same agent and features cannot collide.
  */
 export function agentName(task, absPath) {
   const hash = createHash('sha1').update(absPath).digest('hex').slice(0, 6);
-  return `orch-${hash}-${task.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}`.slice(0, 32);
+  return `orc-${hash}-${task.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}`.slice(0, 32);
 }
 
 export const reportPath = (path) => join(path, REPORT_DIR, 'report.md');
@@ -58,15 +58,15 @@ const paneIdOf = (pane) =>
     : { error: 'herdr response has no pane_id' };
 
 /**
- * The pane for a new worker: the root pane of a new `orch:<feature>` tab, else a split of that
+ * The pane for a new worker: the root pane of a new `orc:<feature>` tab, else a split of that
  * tab (2nd worker right of the first, 3rd/4th below pane n-2: a 2x2 grid). `{ pane }` or `{ error }`.
  */
 export function workerPane(deps, feature, path) {
   const { env } = deps;
   const ws = env.HERDR_WORKSPACE_ID;
-  const label = `orch:${feature}`;
-  const envArgs = ['--env', 'ORCH=1', '--env', 'ORCH_ROLE=implementer'];
-  if (env.ORCH_LEVEL) envArgs.push('--env', `ORCH_LEVEL=${env.ORCH_LEVEL}`);
+  const label = `orc:${feature}`;
+  const envArgs = ['--env', 'ORC=1', '--env', 'ORC_ROLE=implementer'];
+  if (env.ORC_LEVEL) envArgs.push('--env', `ORC_LEVEL=${env.ORC_LEVEL}`);
   const tabs = herdr(deps, ['tab', 'list', '--workspace', ws]);
   if (tabs.error) return tabs;
   if (!Array.isArray(tabs.result.tabs)) return { error: 'herdr tab list has no tabs array' };
@@ -109,7 +109,7 @@ function clearReport(deps, path) {
   try {
     deps.unlink(reportPath(path));
   } catch (e) {
-    if (e.code !== 'ENOENT') return `orch: cannot delete ${reportPath(path)}: ${e.message}`;
+    if (e.code !== 'ENOENT') return `orc: cannot delete ${reportPath(path)}: ${e.message}`;
   }
   return null;
 }
@@ -121,7 +121,7 @@ function clearReport(deps, path) {
 function launch(deps, name, kind, feature, path) {
   const found = workerPane(deps, feature, path);
   if (found.error) return found;
-  const model = deps.env.ORCH_LEVEL === 'high' ? 'opus' : 'sonnet';
+  const model = deps.env.ORC_LEVEL === 'high' ? 'opus' : 'sonnet';
   const native =
     kind === 'claude' ? ['--', '--model', model] : ['--', '--sandbox', 'workspace-write'];
   const args = ['agent', 'start', name, '--kind', kind, '--pane', found.pane, ...native];
@@ -157,7 +157,7 @@ export function start(deps, cwd, { feature, task, path, kind, brief }) {
   const clearErr = clearReport(deps, abs);
   if (clearErr !== null) return fail(clearErr, base);
   const text = [
-    `You are an orch implementer. Read and follow ${join(deps.root, 'agents', 'implementer.md')}.`,
+    `You are an orc implementer. Read and follow ${join(deps.root, 'agents', 'implementer.md')}.`,
     `Your brief: ${resolve(cwd, brief)}. Work only in ${abs}. Do not commit.`,
     `When finished, write your full report ${REPORT_FIELDS} to ${reportPath(abs)}.`,
   ].join(' ');
@@ -250,8 +250,8 @@ export function prompt(deps, cwd, { task, path, text, file }) {
 }
 
 /**
- * Closes the task's pane, but only when it sits in an `orch:*` tab (the tab `start` creates).
- * Not a cwd check: after `orch wt merge`, worktrunk moves the worktree (and the agent's cwd) to
+ * Closes the task's pane, but only when it sits in an `orc:*` tab (the tab `start` creates).
+ * Not a cwd check: after `orc wt merge`, worktrunk moves the worktree (and the agent's cwd) to
  * `.git/wt/trash/`.
  */
 export function close(deps, cwd, { task, path }) {
@@ -265,10 +265,10 @@ export function close(deps, cwd, { task, path }) {
     if (tabInfo.error) return fail(tabInfo.error, { task });
     label = tabInfo.result.tab?.label;
   }
-  if (typeof label !== 'string' || !label.startsWith('orch:')) {
+  if (typeof label !== 'string' || !label.startsWith('orc:')) {
     return {
       code: 1,
-      result: { status: 'refused', task, stderr: `orch: ${name} is not in an orch:* tab` },
+      result: { status: 'refused', task, stderr: `orc: ${name} is not in an orc:* tab` },
     };
   }
   const closed = herdr(deps, ['pane', 'close', pane]);
@@ -277,7 +277,7 @@ export function close(deps, cwd, { task, path }) {
 }
 
 /**
- * `orch pane start|wait|prompt|close`. `deps`: `exec` (never throws), `readFile(path)` (utf8),
+ * `orc pane start|wait|prompt|close`. `deps`: `exec` (never throws), `readFile(path)` (utf8),
  * `unlink(path)`, `env`, `hasCommand(name, PATH)`, plugin `root`. Returns `{ code, result }`; `result` is the
  * JSON document to print.
  */

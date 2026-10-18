@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: "orch workflow: independent, read-only code review. For explicit requests or risky changes (security, concurrency, migrations, public APIs). Never modifies files."
+description: "orc workflow: independent, read-only code review. For explicit requests or risky changes (security, concurrency, migrations, public APIs). Never modifies files."
 model: opus
 effort: high
 tools: Read, Grep, Glob, Bash

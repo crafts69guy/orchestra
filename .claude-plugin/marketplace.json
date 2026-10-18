@@ -8,7 +8,7 @@
   },
   "plugins": [
     {
-      "name": "orch",
+      "name": "orc",
       "description": "Orchestrator workflow: scope, implement, review, ship via specialised subagents and worktrees.",
       "source": "./",
       "category": "productivity"

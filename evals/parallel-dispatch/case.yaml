@@ -3,8 +3,8 @@ name: parallel-dispatch
 description: >-
   Two independent, substantial modules in disjoint files (bench-large's cron parser and expression
   evaluator, each ~100-200 reference lines). The orchestrator should plan, dispatch one
-  orch:implementer per task in its own worktree, and merge each as a conventional commit.
-tags: [orch]
+  orc:implementer per task in its own worktree, and merge each as a conventional commit.
+tags: [orc]
 plugins: ["../../.eval-plugin"]
 runs: 1 # each run is several minutes and ~$1; bench-large covers the timing question
 context:
@@ -22,23 +22,23 @@ graders:
   - name: plan-skill
     type: tool_used
     tool: Skill
-    input_match: '"skill"\s*:\s*"(?:orch:)?plan"'
+    input_match: '"skill"\s*:\s*"(?:orc:)?plan"'
     arm: both
   - name: dispatch-skill
     type: tool_used
     tool: Skill
-    input_match: '"skill"\s*:\s*"(?:orch:)?dispatch"'
+    input_match: '"skill"\s*:\s*"(?:orc:)?dispatch"'
     arm: both
   - name: two-implementers
     type: tool_used
     tool: Agent
-    input_match: '"subagent_type"\s*:\s*"orch:implementer"'
+    input_match: '"subagent_type"\s*:\s*"orc:implementer"'
     min: 2
-  - name: merged-via-orch-wt
+  - name: merged-via-orc-wt
     type: tool_used
     tool: Bash
-    # `orch wt merge` on PATH, or the absolute `<root>/bin/orch` path (optionally quoted)
-    input_match: '(?:^|[\s"/])orch(?:\\")?\s+wt\s+merge\s'
+    # `orc wt merge` on PATH, or the absolute `<root>/bin/orc` path (optionally quoted)
+    input_match: '(?:^|[\s"/])orc(?:\\")?\s+wt\s+merge\s'
     min: 2
   - name: two-conventional-commits
     type: regex

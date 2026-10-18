@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: "orch workflow: writes, modifies or refactors code and adds or fixes tests for a well-defined plan. For changes spanning 2+ files or needing more than one edit-and-test cycle."
+description: "orc workflow: writes, modifies or refactors code and adds or fixes tests for a well-defined plan. For changes spanning 2+ files or needing more than one edit-and-test cycle."
 model: sonnet
 effort: medium
 tools: Read, Write, Edit, Grep, Glob, Bash

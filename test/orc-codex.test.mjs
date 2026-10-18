@@ -4,14 +4,14 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
-import { agentArgs, buildArgs, gitCommonDir, run, spawnExit } from '../scripts/orch-codex.mjs';
+import { agentArgs, buildArgs, gitCommonDir, run, spawnExit } from '../scripts/orc-codex.mjs';
 
-const tmp = mkdtempSync(join(tmpdir(), 'orch-codex-'));
+const tmp = mkdtempSync(join(tmpdir(), 'orc-codex-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
 
 const AGENTS = {
-  'b.toml': 'name = "b"\ndescription = "orch workflow: say \\"hi\\"."\nx = 1\n',
-  'a.toml': 'name = "a"\ndescription = "orch workflow: a."\n',
+  'b.toml': 'name = "b"\ndescription = "orc workflow: say \\"hi\\"."\nx = 1\n',
+  'a.toml': 'name = "a"\ndescription = "orc workflow: a."\n',
   'c.toml': 'name = "c"\n',
   'notes.md': 'ignored',
 };
@@ -61,11 +61,11 @@ test('agentArgs emits config_file and description per toml, sorted, skipping non
     '-c',
     `agents.a.config_file=${JSON.stringify(join(dir, 'a.toml'))}`,
     '-c',
-    'agents.a.description="orch workflow: a."',
+    'agents.a.description="orc workflow: a."',
     '-c',
     `agents.b.config_file=${JSON.stringify(join(dir, 'b.toml'))}`,
     '-c',
-    'agents.b.description="orch workflow: say \\"hi\\"."',
+    'agents.b.description="orc workflow: say \\"hi\\"."',
     '-c',
     `agents.c.config_file=${JSON.stringify(join(dir, 'c.toml'))}`,
   ]);
@@ -90,7 +90,7 @@ test('buildArgs JSON-encodes developer_instructions and adds --add-dir only with
   ]);
 });
 
-test('run prepends context, agents and --add-dir, adds ORCH=1 and propagates the exit code', () => {
+test('run prepends context, agents and --add-dir, adds ORC=1 and propagates the exit code', () => {
   const { deps, out } = harness({
     spawn: (args, env) => {
       out.spawned = { args, env };
@@ -102,11 +102,11 @@ test('run prepends context, agents and --add-dir, adds ORCH=1 and propagates the
   assert.equal(args[0], '-c');
   const instructions = JSON.parse(args[1].slice('developer_instructions='.length));
   assert.ok(instructions.startsWith('# RULES'));
-  assert.ok(instructions.includes(`orch CLI: ${join(deps.root, 'bin', 'orch')}`));
+  assert.ok(instructions.includes(`orc CLI: ${join(deps.root, 'bin', 'orc')}`));
   assert.ok(!instructions.includes('worktrunk'));
   assert.deepEqual(args.slice(-4), ['--add-dir', '/repo/.git', 'exec', 'hello']);
   assert.equal(args.filter((a) => a.startsWith('agents.')).length, 5);
-  assert.deepEqual(env, { PATH: '/bin', KEEP: 'y', ORCH: '1', ORCH_ROLE: '' });
+  assert.deepEqual(env, { PATH: '/bin', KEEP: 'y', ORC: '1', ORC_ROLE: '' });
 });
 
 test('run includes the wt warning when wt is missing and skips --add-dir outside git', () => {
@@ -165,22 +165,22 @@ test('run injects the cocoindex-code server only when ccc is enabled', () => {
   const on = harness(indexed);
   run(on.deps);
   assert.ok(on.out.spawned.args.includes('mcp_servers.cocoindex-code.command="ccc"'));
-  const off = harness({ ...indexed, env: { PATH: '/bin', ORCH_CCC: '0' } });
+  const off = harness({ ...indexed, env: { PATH: '/bin', ORC_CCC: '0' } });
   run(off.deps);
   assert.ok(!off.out.spawned.args.some((a) => a.startsWith('mcp_servers.')));
 });
 
-test('run sets the panes flag only with ORCH_PANES=1 inside herdr', () => {
+test('run sets the panes flag only with ORC_PANES=1 inside herdr', () => {
   const instructions = (env) => {
     const { deps, out } = harness({
-      root: fixtureRoot(`panes-${Object.keys(env).length}`, 'a\nb <!-- orch:panes -->\n'),
+      root: fixtureRoot(`panes-${Object.keys(env).length}`, 'a\nb <!-- orc:panes -->\n'),
       env: { PATH: '/bin', ...env },
     });
     run(deps);
     return JSON.parse(out.spawned.args[1].slice('developer_instructions='.length));
   };
-  const on = instructions({ ORCH_PANES: '1', HERDR_ENV: '1' });
+  const on = instructions({ ORC_PANES: '1', HERDR_ENV: '1' });
   assert.match(on, /\nb\n/);
   assert.match(on, /pane start\|wait\|prompt\|close/);
-  assert.doesNotMatch(instructions({ ORCH_PANES: '1' }), /pane start/);
+  assert.doesNotMatch(instructions({ ORC_PANES: '1' }), /pane start/);
 });

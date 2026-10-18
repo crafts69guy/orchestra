@@ -3,10 +3,10 @@ import { accessSync, constants, existsSync, readFileSync, realpathSync } from 'n
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cccEnabled } from '../scripts/ccc.mjs';
-import { exec } from '../scripts/orch-wt.mjs';
+import { exec } from '../scripts/orc-wt.mjs';
 
 export const WT_WARNING =
-  'orch: `wt` (worktrunk) not found on PATH; parallel dispatch needs it (`brew install worktrunk`).';
+  'orc: `wt` (worktrunk) not found on PATH; parallel dispatch needs it (`brew install worktrunk`).';
 
 export function pluginRoot(metaUrl) {
   return join(dirname(fileURLToPath(metaUrl)), '..');
@@ -32,9 +32,9 @@ export function which(name, pathEnv = '') {
   });
 }
 
-/** A line ending in `<!-- orch:NAME -->` is dropped when `flags[NAME]` is falsy, else the marker is stripped. */
+/** A line ending in `<!-- orc:NAME -->` is dropped when `flags[NAME]` is falsy, else the marker is stripped. */
 export function applyMarkers(rules, flags) {
-  const marker = / *<!-- orch:(\w+) -->$/;
+  const marker = / *<!-- orc:(\w+) -->$/;
   return rules
     .split('\n')
     .filter((l) => {
@@ -46,17 +46,17 @@ export function applyMarkers(rules, flags) {
 }
 
 /**
- * `orchPath` is the absolute `bin/orch`; plugin bin/ is not on PATH under Codex, so name it.
- * `flags.panes` adds `orch pane` to the CLI line (and keeps the `orch:panes` rule line).
+ * `orcPath` is the absolute `bin/orc`; plugin bin/ is not on PATH under Codex, so name it.
+ * `flags.panes` adds `orc pane` to the CLI line (and keeps the `orc:panes` rule line).
  */
 export function buildContext(
   rules,
   hasWt,
-  orchPath,
+  orcPath,
   flags = { docs: true, ccc: false, high: false, panes: false },
 ) {
-  const pane = flags.panes ? ` and \`${orchPath} pane start|wait|prompt|close\`` : '';
-  const withCli = `${applyMarkers(rules, flags).trimEnd()}\n\norch CLI: ${orchPath} (use \`${orchPath} wt new|merge|list\`${pane})\n`;
+  const pane = flags.panes ? ` and \`${orcPath} pane start|wait|prompt|close\`` : '';
+  const withCli = `${applyMarkers(rules, flags).trimEnd()}\n\norc CLI: ${orcPath} (use \`${orcPath} wt new|merge|list\`${pane})\n`;
   return hasWt ? withCli : `${withCli}\n${WT_WARNING}\n`;
 }
 
@@ -68,21 +68,21 @@ export function formatOutput(additionalContext) {
 
 /**
  * Returns the process exit code; never throws for a missing rules file. A herdr pane worker
- * (`ORCH_ROLE` set) gets no orchestrator rules: it follows its implementer prompt.
+ * (`ORC_ROLE` set) gets no orchestrator rules: it follows its implementer prompt.
  */
 export function run({ env, root, cwd, read, hasCommand, exec, exists, stdout, stderr }) {
-  if (env.ORCH !== '1' || env.ORCH_ROLE) return 0;
+  if (env.ORC !== '1' || env.ORC_ROLE) return 0;
   const rules = readRules(root, read);
   if (rules === null) {
-    stderr(`orch: rules/orchestrator.md not found under ${root}; skipping injection\n`);
+    stderr(`orc: rules/orchestrator.md not found under ${root}; skipping injection\n`);
     return 0;
   }
   stdout(
     formatOutput(
-      buildContext(rules, hasCommand('wt', env.PATH), join(root, 'bin', 'orch'), {
-        docs: env.ORCH_DOCS !== '0',
-        high: env.ORCH_LEVEL === 'high',
-        panes: env.ORCH_PANES === '1' && env.HERDR_ENV === '1',
+      buildContext(rules, hasCommand('wt', env.PATH), join(root, 'bin', 'orc'), {
+        docs: env.ORC_DOCS !== '0',
+        high: env.ORC_LEVEL === 'high',
+        panes: env.ORC_PANES === '1' && env.HERDR_ENV === '1',
         ccc: cccEnabled(env, cwd, { exec, exists, hasCommand }),
       }),
     ),

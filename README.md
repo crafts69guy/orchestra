@@ -1,11 +1,11 @@
 # Orchestra
 
-Orchestra (plugin name `orch`) is a cross-harness orchestration workflow for Claude Code and
+Orchestra (plugin name `orc`) is a cross-harness orchestration workflow for Claude Code and
 Codex. A main agent scopes, delegates, reviews and ships work through four specialised subagents
 (`scoper`, `implementer`, `reviewer`, `shipper`), running independent tasks in parallel git
 worktrees.
 
-The rules are always-on but opt-in: they are injected at session start only when `ORCH=1`.
+The rules are always-on but opt-in: they are injected at session start only when `ORC=1`.
 
 ## Requirements
 
@@ -14,53 +14,53 @@ The rules are always-on but opt-in: they are injected at session start only when
   session hook warns when `wt` is missing.
 - Claude Code and/or Codex.
 - Optional: [cocoindex-code](https://github.com/cocoindex-io/cocoindex-code) (`uv tool install 'cocoindex-code[full]'`)
-  for semantic code search. orch never installs it.
+  for semantic code search. orc never installs it.
 - Claude Code: the `ponytail` plugin is declared as a dependency. Add its marketplace first:
   `/plugin marketplace add DietrichGebert/ponytail`.
 
 ## Install
 
-Install the `orch` CLI, then let it check everything else:
+Install the `orc` CLI, then let it check everything else:
 
 ```sh
 npm i -g @crafts69guy/orchestra
-orch doctor
+orc doctor
 ```
 
-`orch doctor` prints one line per check with a fix hint for each failure, and exits 1 if a
+`orc doctor` prints one line per check with a fix hint for each failure, and exits 1 if a
 required check fails. Install the plugin for your harness as it suggests:
 
 Claude Code:
 
 ```text
 /plugin marketplace add crafts69guy/orchestra
-/plugin install orch@orchestra
+/plugin install orc@orchestra
 ```
 
 Codex:
 
 ```sh
 codex plugin marketplace add crafts69guy/orchestra
-codex plugin add orch@orchestra
+codex plugin add orc@orchestra
 ```
 
 ## Usage
 
 | Command | Does |
 |---|---|
-| `orch doctor [--json]` | checks Node, git, `wt`, the harness CLIs and the installed plugins |
-| `orch status [--json]` | one line per plan task (`.scratch/<feature>/plan.md`) with its worktree, pane agent state and report status |
-| `orch context [--scope user\|project\|all] [--json]` | audits what Claude Code and Codex load into context (memory, skills, agents, plugins, MCP): token estimates and findings |
-| `orch claude [--yolo] [--level high] [--panes] [args...]` | starts `claude` with `ORCH=1` and `--model opus` (unless you pass `--model`) |
-| `orch codex [--yolo] [args...]` | starts `codex` with `ORCH=1` and the orchestration context (below) |
-| `orch update` | updates the npm CLI, then the plugin for each harness that has the `orchestra` marketplace (`claude plugin update orch@orchestra`, `codex plugin marketplace upgrade orchestra`); skips npm from a git checkout |
-| `orch ccc init [--force]` | indexes this repo with `ccc` for semantic search (repos under 200 files need `--force`) |
-| `orch wt new\|merge\|remove\|list ...` | worktree helper used by the `dispatch` skill (`remove` abandons a task: worktree and branch); prints JSON |
-| `orch pane start <F> <T> --path <wt> --brief <file>`, `wait\|prompt\|close <T> --path <wt> ...` | herdr pane workers for the `dispatch` skill (pane mode, below); prints JSON |
-| `orch eval [args...]` | behaviour evals; only from a git checkout (see [AGENTS.md](AGENTS.md)) |
-| `orch --help`, `orch --version` | usage and version |
+| `orc doctor [--json]` | checks Node, git, `wt`, the harness CLIs and the installed plugins |
+| `orc status [--json]` | one line per plan task (`.scratch/<feature>/plan.md`) with its worktree, pane agent state and report status |
+| `orc context [--scope user\|project\|all] [--json]` | audits what Claude Code and Codex load into context (memory, skills, agents, plugins, MCP): token estimates and findings |
+| `orc claude [--yolo] [--level high] [--panes] [args...]` | starts `claude` with `ORC=1` and `--model opus` (unless you pass `--model`) |
+| `orc codex [--yolo] [args...]` | starts `codex` with `ORC=1` and the orchestration context (below) |
+| `orc update` | updates the npm CLI, then the plugin for each harness that has the `orchestra` marketplace (`claude plugin update orc@orchestra`, `codex plugin marketplace upgrade orchestra`); skips npm from a git checkout |
+| `orc ccc init [--force]` | indexes this repo with `ccc` for semantic search (repos under 200 files need `--force`) |
+| `orc wt new\|merge\|remove\|list ...` | worktree helper used by the `dispatch` skill (`remove` abandons a task: worktree and branch); prints JSON |
+| `orc pane start <F> <T> --path <wt> --brief <file>`, `wait\|prompt\|close <T> --path <wt> ...` | herdr pane workers for the `dispatch` skill (pane mode, below); prints JSON |
+| `orc eval [args...]` | behaviour evals; only from a git checkout (see [AGENTS.md](AGENTS.md)) |
+| `orc --help`, `orc --version` | usage and version |
 
-`orch status --json`, `orch doctor --json` and `orch context --json` are a versioned contract
+`orc status --json`, `orc doctor --json` and `orc context --json` are a versioned contract
 (`schemaVersion`) for external clients such as a Raycast extension; see
 [ADR-0010](docs/adr/0010-json-contract-for-external-clients.md).
 
@@ -68,33 +68,33 @@ codex plugin add orch@orchestra
 `--dangerously-bypass-approvals-and-sandbox` on Codex). Without it the harness keeps its normal
 permission model. Other arguments pass through to the harness, and so does its exit code.
 
-`orch claude` only sets `ORCH=1`; `ORCH=1 claude` works too. Without `ORCH=1` the hooks exit
+`orc claude` only sets `ORC=1`; `ORC=1 claude` works too. Without `ORC=1` the hooks exit
 silently and the session is untouched.
 
 The handoff brief to `implementer` includes a Docs/JSDoc acceptance criterion (new or changed exports
-carry JSDoc, touched docs are updated). `ORCH_DOCS=0` turns it off; any other value keeps it on.
+carry JSDoc, touched docs are updated). `ORC_DOCS=0` turns it off; any other value keeps it on.
 
-When `ccc` is on `PATH` and the repo's git root is indexed (`orch ccc init`), `orch claude` and
-`orch codex` add the `cocoindex-code` MCP server for that run. `ORCH_CCC=0` turns it off; any other
+When `ccc` is on `PATH` and the repo's git root is indexed (`orc ccc init`), `orc claude` and
+`orc codex` add the `cocoindex-code` MCP server for that run. `ORC_CCC=0` turns it off; any other
 value keeps it on. A repo indexed mid-session needs a restart.
 
-`orch claude --level high` (or `ORCH_LEVEL=high`) raises the subagent models for that session, Claude
+`orc claude --level high` (or `ORC_LEVEL=high`) raises the subagent models for that session, Claude
 Code only: `implementer` runs on opus, `scoper` and `shipper` on sonnet, `reviewer` is unchanged, and
 so is the orchestrator's own model. `--level default` (or no flag) keeps the agents' own models.
 
-`orch claude --panes` (or `ORCH_PANES=1`) turns on pane mode when the session runs inside
+`orc claude --panes` (or `ORC_PANES=1`) turns on pane mode when the session runs inside
 [herdr](https://herdr.dev) (`HERDR_ENV=1`): `dispatch` runs each implementer as a real `claude` or
-`codex` session in a herdr pane of an `orch:<feature>` tab, inside its worktree, so you can watch
-and step into each one. Workers write their report to `<worktree>/.orch/report.md` (git-excluded).
+`codex` session in a herdr pane of an `orc:<feature>` tab, inside its worktree, so you can watch
+and step into each one. Workers write their report to `<worktree>/.orc/report.md` (git-excluded).
 Outside herdr the flag has no effect. See [ADR-0009](docs/adr/0009-herdr-pane-workers.md).
 
 ## Codex
 
-Codex does not trust project agents or plugin hooks by default, so `orch codex` runs `codex`
-with `ORCH=1` and prepends, per run and without touching `~/.codex`:
+Codex does not trust project agents or plugin hooks by default, so `orc codex` runs `codex`
+with `ORC=1` and prepends, per run and without touching `~/.codex`:
 
 - `-c developer_instructions=...`: the same context the SessionStart hook injects (rules, the
-  absolute path of `orch`, `wt` warning).
+  absolute path of `orc`, `wt` warning).
 - `-c agents.<name>.config_file=...` and `.description=...` for each `codex/agents/*.toml`.
 - `--add-dir <git common dir>` inside a git repo, because `workspace-write` blocks `.git` and
   worktrees and commits need it.

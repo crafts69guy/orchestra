@@ -1,6 +1,6 @@
 ---
 name: plan
-description: "orch workflow: write .scratch/<feature>/plan.md, a task list with file ownership and dependencies that the dispatch skill can run in parallel waves. Use when work has 2+ separable parts."
+description: "orc workflow: write .scratch/<feature>/plan.md, a task list with file ownership and dependencies that the dispatch skill can run in parallel waves. Use when work has 2+ separable parts."
 ---
 
 # Plan

@@ -1,7 +1,7 @@
 schema_version: "1.1"
 name: inline-small
 description: A one-line, fully specified fix. The orchestrator should edit inline, not delegate.
-tags: [orch]
+tags: [orc]
 plugins: ["../../.eval-plugin"]
 runs: 1
 context:

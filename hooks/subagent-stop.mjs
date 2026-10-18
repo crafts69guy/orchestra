@@ -8,7 +8,7 @@ export const STATUS = /^[\s>*#-]*Status\W*(done|partial|blocked)\b/im;
 const VALIDATION = /^[\s>*#-]*Validation\b/im;
 
 export const BLOCK_REASON =
-  'orch: your report is incomplete. Reply again with a `Status: done|partial|blocked` line and a `Validation` section listing each command you ran and its result.';
+  'orc: your report is incomplete. Reply again with a `Status: done|partial|blocked` line and a `Validation` section listing each command you ran and its result.';
 
 /** True when the implementer report carries both a Status line and a Validation section. */
 export function hasEvidence(message) {
@@ -45,7 +45,7 @@ export function handbackReport(path, readFile = (p) => readFileSync(p, 'utf8')) 
 
 /** Returns the exit code; never throws, bad stdin JSON is a silent allow. */
 export function run({ env, input, stdout, readFile }) {
-  if (env.ORCH !== '1') return 0;
+  if (env.ORC !== '1') return 0;
   let payload;
   try {
     payload = JSON.parse(input);
@@ -65,7 +65,7 @@ export function run({ env, input, stdout, readFile }) {
 export function main(proc = process, read = readStdin) {
   proc.exitCode = run({
     env: proc.env,
-    input: proc.env.ORCH === '1' ? read() : '',
+    input: proc.env.ORC === '1' ? read() : '',
     stdout: (s) => proc.stdout.write(s),
   });
 }

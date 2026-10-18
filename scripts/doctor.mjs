@@ -1,9 +1,9 @@
 import { fail, format, info, pass, warn } from './lib/report.mjs';
-import { exec } from './orch-wt.mjs';
+import { exec } from './orc-wt.mjs';
 
 const MIN_NODE = [22, 8];
-const ORCH_FIX =
-  'claude plugin marketplace add crafts69guy/orchestra && claude plugin install orch@orchestra';
+const ORC_FIX =
+  'claude plugin marketplace add crafts69guy/orchestra && claude plugin install orc@orchestra';
 const PONYTAIL_FIX =
   'claude plugin marketplace add DietrichGebert/ponytail && claude plugin install ponytail@ponytail';
 
@@ -38,15 +38,15 @@ export function checkPlugins(deps) {
     list = JSON.parse(r.out);
     if (!Array.isArray(list)) throw new Error('claude plugin list --json is not an array');
   } catch (e) {
-    return [fail('orch@orchestra', e.message, ORCH_FIX)];
+    return [fail('orc@orchestra', e.message, ORC_FIX)];
   }
   const enabled = (id) => list.find((p) => p?.id === id && p.enabled === true);
-  const orch = enabled('orch@orchestra');
+  const orc = enabled('orc@orchestra');
   const ponytail = enabled('ponytail@ponytail');
   return [
-    orch
-      ? pass('orch@orchestra', `enabled (${orch.version}, ${orch.scope})`)
-      : fail('orch@orchestra', 'not installed or not enabled', ORCH_FIX),
+    orc
+      ? pass('orc@orchestra', `enabled (${orc.version}, ${orc.scope})`)
+      : fail('orc@orchestra', 'not installed or not enabled', ORC_FIX),
     ponytail
       ? pass('ponytail@ponytail', `enabled (${ponytail.version}, ${ponytail.scope})`)
       : warn('ponytail@ponytail', 'not installed or not enabled', PONYTAIL_FIX),
@@ -63,7 +63,7 @@ export function run(deps = realDeps) {
     checkTool(deps, 'git', ['--version'], 'install git'),
     checkTool(deps, 'wt', ['--version'], 'brew install worktrunk'),
     checkTool(deps, 'ccc', ['version'], "uv tool install 'cocoindex-code[full]'", warn),
-    // optional: only pane mode (`orch claude --panes`) needs herdr
+    // optional: only pane mode (`orc claude --panes`) needs herdr
     deps.env?.HERDR_ENV === '1'
       ? checkTool(deps, 'herdr', ['--version'], 'see https://herdr.dev', warn)
       : info('herdr', 'not in herdr (pane mode off)'),

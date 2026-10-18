@@ -1,9 +1,9 @@
 import { dirname, join, resolve } from 'node:path';
 import { STATUS } from '../hooks/subagent-stop.mjs';
-import { agentName, agentState, readReport } from './orch-pane.mjs';
-import { featureTasks, taskBranch, worktrees } from './orch-wt.mjs';
+import { agentName, agentState, readReport } from './orc-pane.mjs';
+import { featureTasks, taskBranch, worktrees } from './orc-wt.mjs';
 
-const USAGE = 'usage: orch status [--json]\n';
+const USAGE = 'usage: orc status [--json]\n';
 
 /** `Base branch: <F>   # comment` (or `(comment)`): the first token, null when absent. */
 export function parseBase(plan) {
@@ -62,7 +62,7 @@ export function collect(deps, cwd) {
   // The main checkout, even from a task worktree: plans live in its .scratch/, not the worktree's.
   const common = deps.exec('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd);
   if (common.status !== 0 || !common.stdout.trim()) {
-    return { code: 1, error: `orch status: not a git repository: ${cwd}` };
+    return { code: 1, error: `orc status: not a git repository: ${cwd}` };
   }
   const root = dirname(common.stdout.trim());
   const warnings = [];
@@ -125,13 +125,13 @@ export function formatText(result) {
   return result.features.length ? 'no tasks\n' : 'no features\n';
 }
 
-/** `orch status [--json]`. Returns `{ code, out, err }`; warnings go to `err`. Never throws. */
+/** `orc status [--json]`. Returns `{ code, out, err }`; warnings go to `err`. Never throws. */
 export function run(args, deps, cwd) {
   const json = args.includes('--json');
   if (args.some((a) => a !== '--json')) return { code: 1, out: '', err: USAGE };
   const r = collect(deps, cwd);
   if (r.error) return { code: 1, out: '', err: `${r.error}\n` };
   const out = json ? `${JSON.stringify(r.result, null, 2)}\n` : formatText(r.result);
-  const err = json ? '' : r.result.warnings.map((w) => `orch status: ${w}\n`).join('');
+  const err = json ? '' : r.result.warnings.map((w) => `orc status: ${w}\n`).join('');
   return { code: 0, out, err };
 }

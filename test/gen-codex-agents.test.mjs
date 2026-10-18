@@ -15,7 +15,7 @@ import {
   stale,
 } from '../scripts/gen-codex-agents.mjs';
 
-const tmp = mkdtempSync(join(tmpdir(), 'orch-gen-'));
+const tmp = mkdtempSync(join(tmpdir(), 'orc-gen-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
 
 let n = 0;

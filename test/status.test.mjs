@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { agentName } from '../scripts/orch-pane.mjs';
+import { agentName } from '../scripts/orc-pane.mjs';
 import { collect, formatText, parseBase, parseTasks, run } from '../scripts/status.mjs';
 
 // Shaped like the real .scratch/p5 and ccc-integration plans: multi-line `files:` flow lists,
@@ -18,10 +18,10 @@ Base branch: feat/x (single checkout; files are disjoint across tasks)
 
 \`\`\`yaml
 - id: T1
-  goal: bin/orch dispatcher with claude/codex/wt
+  goal: bin/orc dispatcher with claude/codex/wt
   size: large
-  files: [bin/orch, scripts/orch.mjs,
-          hooks/session-start.mjs, test/orch.test.mjs,
+  files: [bin/orc, scripts/orc.mjs,
+          hooks/session-start.mjs, test/orc.test.mjs,
           .codex-plugin/plugin.json]
   depends_on: []
   validate: npm test && npx biome check .
@@ -30,7 +30,7 @@ Base branch: feat/x (single checkout; files are disjoint across tasks)
       id: nested-not-a-key
     - size: nested
 - id: T2
-  goal: orch doctor prerequisite checks
+  goal: orc doctor prerequisite checks
   depends_on: [T1, T0 ]
 \`\`\`
 
@@ -55,11 +55,11 @@ test('parseTasks reads task-level id, goal, size and depends_on only', () => {
   assert.deepEqual(parseTasks(PLAN), [
     {
       id: 'T1',
-      goal: 'bin/orch dispatcher with claude/codex/wt',
+      goal: 'bin/orc dispatcher with claude/codex/wt',
       size: 'large',
       dependsOn: [],
     },
-    { id: 'T2', goal: 'orch doctor prerequisite checks', size: null, dependsOn: ['T1', 'T0'] },
+    { id: 'T2', goal: 'orc doctor prerequisite checks', size: null, dependsOn: ['T1', 'T0'] },
   ]);
 });
 
@@ -168,8 +168,8 @@ test('collect joins plan tasks with worktrees, herdr agents and reports', () => 
     },
     files: {
       ...FILES,
-      [`${T1}/.orch/report.md`]: '## Status: Done\n',
-      [`${T2}/.orch/report.md`]: 'no status line\n',
+      [`${T1}/.orc/report.md`]: '## Status: Done\n',
+      [`${T2}/.orc/report.md`]: 'no status line\n',
     },
   });
   const { code, result } = collect(deps, `${ROOT}/sub`);
@@ -187,7 +187,7 @@ test('collect joins plan tasks with worktrees, herdr agents and reports', () => 
         tasks: [
           {
             id: 'T1',
-            goal: 'bin/orch dispatcher with claude/codex/wt',
+            goal: 'bin/orc dispatcher with claude/codex/wt',
             size: 'large',
             dependsOn: [],
             branch: 'p5--T1',
@@ -197,7 +197,7 @@ test('collect joins plan tasks with worktrees, herdr agents and reports', () => 
           },
           {
             id: 'T2',
-            goal: 'orch doctor prerequisite checks',
+            goal: 'orc doctor prerequisite checks',
             size: null,
             dependsOn: ['T1', 'T0'],
             branch: 'p5--T2',
@@ -277,7 +277,7 @@ test('no .scratch gives no features; outside git is an error', () => {
   assert.equal(collect(fake({ routes: blank }), '/tmp/x').code, 1);
   assert.deepEqual(collect(fake(), '/tmp/x'), {
     code: 1,
-    error: 'orch status: not a git repository: /tmp/x',
+    error: 'orc status: not a git repository: /tmp/x',
   });
 });
 
@@ -311,16 +311,16 @@ test('run prints JSON or text, warnings to stderr in text mode, usage on bad arg
   const text = run([], deps(), ROOT);
   assert.equal(text.code, 0);
   assert.match(text.out, /^p5\/T1 {2}- {2}-\n/);
-  assert.equal(text.err, 'orch status: wt list failed; worktrees unknown: wt: ENOENT\n');
+  assert.equal(text.err, 'orc status: wt list failed; worktrees unknown: wt: ENOENT\n');
 
   assert.deepEqual(run(['--bogus'], deps(), ROOT), {
     code: 1,
     out: '',
-    err: 'usage: orch status [--json]\n',
+    err: 'usage: orc status [--json]\n',
   });
   assert.deepEqual(run([], fake(), '/x'), {
     code: 1,
     out: '',
-    err: 'orch status: not a git repository: /x\n',
+    err: 'orc status: not a git repository: /x\n',
   });
 });

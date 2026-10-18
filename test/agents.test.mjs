@@ -19,7 +19,7 @@ for (const file of files) {
       assert.ok(data[key], `${key} is set`);
     }
     assert.equal(data.name, file.replace(/\.md$/, ''));
-    assert.ok(data.description.startsWith('orch workflow:'), 'description prefix');
+    assert.ok(data.description.startsWith('orc workflow:'), 'description prefix');
     assert.doesNotMatch(data.description, /proactively/i);
     assert.ok(body.trim().split('\n').length <= 25, 'body stays under ~25 lines');
   });

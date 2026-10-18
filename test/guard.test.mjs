@@ -7,7 +7,7 @@ import { classify, decide, formatDeny, main, roleOf, run } from '../hooks/guard.
 const script = fileURLToPath(new URL('../hooks/guard.mjs', import.meta.url));
 
 test('roleOf strips the plugin prefix and defaults to main', () => {
-  assert.equal(roleOf('orch:implementer'), 'implementer');
+  assert.equal(roleOf('orc:implementer'), 'implementer');
   assert.equal(roleOf('implementer'), 'implementer');
   assert.equal(roleOf(undefined), 'main');
   assert.equal(roleOf(''), 'main');
@@ -85,32 +85,32 @@ function call(env, payload) {
 }
 const bash = (command, agent_type) => ({ tool_name: 'Bash', tool_input: { command }, agent_type });
 
-test('run is silent unless ORCH=1', () => {
+test('run is silent unless ORC=1', () => {
   assert.deepEqual(call({}, bash('git push')), { code: 0, stdout: '' });
-  assert.deepEqual(call({ ORCH: '0' }, bash('git push')), { code: 0, stdout: '' });
+  assert.deepEqual(call({ ORC: '0' }, bash('git push')), { code: 0, stdout: '' });
 });
 
 test('run denies per role and allows silently otherwise', () => {
-  const env = { ORCH: '1' };
-  const denied = call(env, bash('git commit -m x', 'orch:implementer'));
+  const env = { ORC: '1' };
+  const denied = call(env, bash('git commit -m x', 'orc:implementer'));
   assert.equal(denied.code, 0);
   assert.equal(JSON.parse(denied.stdout).hookSpecificOutput.permissionDecision, 'deny');
   assert.equal(call(env, bash('git push')).stdout.includes('deny'), true);
   assert.deepEqual(call(env, bash('git commit -m x')), { code: 0, stdout: '' });
-  assert.deepEqual(call(env, bash('git push', 'orch:shipper')), { code: 0, stdout: '' });
-  assert.deepEqual(call(env, bash('ls', 'orch:implementer')), { code: 0, stdout: '' });
+  assert.deepEqual(call(env, bash('git push', 'orc:shipper')), { code: 0, stdout: '' });
+  assert.deepEqual(call(env, bash('ls', 'orc:implementer')), { code: 0, stdout: '' });
 });
 
 test('run exits 0 silently on bad or oddly shaped input', () => {
-  const env = { ORCH: '1' };
+  const env = { ORC: '1' };
   for (const input of ['', '{not json', 'null', '{}', '{"tool_input":null}']) {
     assert.deepEqual(call(env, input), { code: 0, stdout: '' });
   }
 });
 
-test('main wires env, stdin reader and stdout; skips reading without ORCH', () => {
+test('main wires env, stdin reader and stdout; skips reading without ORC', () => {
   const proc = (env) => ({ env, out: '', stdout: { write: (s) => (proc.out += s) } });
-  const on = proc({ ORCH: '1' });
+  const on = proc({ ORC: '1' });
   main(on, () => JSON.stringify(bash('git push')));
   assert.equal(on.exitCode, 0);
   assert.match(proc.out, /deny/);
@@ -125,41 +125,41 @@ test('script entrypoint reads stdin end to end', () => {
   const deny = spawnSync(
     process.execPath,
     [script],
-    opts({ ORCH: '1' }, JSON.stringify(bash('git push', 'orch:reviewer'))),
+    opts({ ORC: '1' }, JSON.stringify(bash('git push', 'orc:reviewer'))),
   );
   assert.equal(deny.status, 0);
   assert.equal(JSON.parse(deny.stdout).hookSpecificOutput.permissionDecision, 'deny');
 
-  const garbage = spawnSync(process.execPath, [script], opts({ ORCH: '1' }, 'nope'));
+  const garbage = spawnSync(process.execPath, [script], opts({ ORC: '1' }, 'nope'));
   assert.equal(garbage.status, 0);
   assert.equal(garbage.stdout, '');
 
   const off = spawnSync(
     process.execPath,
     [script],
-    opts({ ORCH: '' }, JSON.stringify(bash('git push'))),
+    opts({ ORC: '' }, JSON.stringify(bash('git push'))),
   );
   assert.equal(off.status, 0);
   assert.equal(off.stdout, '');
 });
 
-test('run: a no-commit ORCH_ROLE (herdr pane workers) overrides agent_type', () => {
-  const pane = { ORCH: '1', ORCH_ROLE: 'implementer' };
+test('run: a no-commit ORC_ROLE (herdr pane workers) overrides agent_type', () => {
+  const pane = { ORC: '1', ORC_ROLE: 'implementer' };
   assert.match(call(pane, bash('git commit -m x')).stdout, /implementer role must not commit/);
   assert.match(call(pane, bash('git commit -m x', '')).stdout, /implementer role must not commit/);
   assert.match(
-    call(pane, bash('git push', 'orch:shipper')).stdout,
+    call(pane, bash('git push', 'orc:shipper')).stdout,
     /only the shipper role may push.*role: implementer/,
   );
-  assert.match(call(pane, bash('git commit -m x', 'orch:shipper')).stdout, /must not commit/);
-  assert.deepEqual(call({ ORCH: '1', ORCH_ROLE: '' }, bash('git commit -m x')), {
+  assert.match(call(pane, bash('git commit -m x', 'orc:shipper')).stdout, /must not commit/);
+  assert.deepEqual(call({ ORC: '1', ORC_ROLE: '' }, bash('git commit -m x')), {
     code: 0,
     stdout: '',
   });
 });
 
-test('run ignores an ORCH_ROLE that would widen permissions', () => {
-  const shipper = { ORCH: '1', ORCH_ROLE: 'shipper' };
+test('run ignores an ORC_ROLE that would widen permissions', () => {
+  const shipper = { ORC: '1', ORC_ROLE: 'shipper' };
   assert.match(
     call(shipper, bash('git push')).stdout,
     /only the shipper role may push.*role: main/,

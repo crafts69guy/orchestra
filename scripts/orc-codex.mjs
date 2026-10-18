@@ -11,8 +11,8 @@ export function spawnExit(r, name, stderr, hint) {
   const missing = r.error.code === 'ENOENT';
   stderr(
     missing
-      ? `orch: \`${name}\` not found on PATH; ${hint}\n`
-      : `orch: failed to run ${name}: ${r.error.message}\n`,
+      ? `orc: \`${name}\` not found on PATH; ${hint}\n`
+      : `orc: failed to run ${name}: ${r.error.message}\n`,
   );
   return missing ? 127 : 1;
 }
@@ -75,14 +75,14 @@ export function run({
 }) {
   const rules = readRules(root, read);
   if (rules === null) {
-    stderr(`orch codex: rules/orchestrator.md not found under ${root}\n`);
+    stderr(`orc codex: rules/orchestrator.md not found under ${root}\n`);
     return 1;
   }
   const ccc = cccEnabled(env, cwd, { exec, exists, hasCommand });
-  const context = buildContext(rules, hasCommand('wt', env.PATH), join(root, 'bin', 'orch'), {
-    docs: env.ORCH_DOCS !== '0',
+  const context = buildContext(rules, hasCommand('wt', env.PATH), join(root, 'bin', 'orc'), {
+    docs: env.ORC_DOCS !== '0',
     ccc,
-    panes: env.ORCH_PANES === '1' && env.HERDR_ENV === '1',
+    panes: env.ORC_PANES === '1' && env.HERDR_ENV === '1',
   });
   const prefix = buildArgs({
     context,
@@ -90,6 +90,6 @@ export function run({
     commonDir: gitDir(cwd),
     mcp: ccc ? codexMcpArgs() : [],
   });
-  const r = spawn([...prefix, ...argv], { ...env, ORCH: '1', ORCH_ROLE: '' });
+  const r = spawn([...prefix, ...argv], { ...env, ORC: '1', ORC_ROLE: '' });
   return spawnExit(r, 'codex', stderr, 'install Codex CLI first.');
 }

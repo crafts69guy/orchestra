@@ -1,6 +1,6 @@
 ---
 name: scoper
-description: "orch workflow: read-only scoping of a non-trivial task in unfamiliar code. Gathers facts and returns a brief."
+description: "orc workflow: read-only scoping of a non-trivial task in unfamiliar code. Gathers facts and returns a brief."
 model: haiku
 effort: low
 maxTurns: 30

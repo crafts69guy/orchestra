@@ -12,17 +12,17 @@ Contributor guide for this repo. Node >= 22.8, ESM, zero runtime dependencies.
   fail on drift without writing (CI does this).
 - `npm run check` runs lint, the generator staleness check and tests.
 - `npm run validate` runs `claude plugin validate .`.
-- `npm run eval` (or `orch eval`) runs the behaviour evals (below). Not part of `check` or CI.
+- `npm run eval` (or `orc eval`) runs the behaviour evals (below). Not part of `check` or CI.
 - `npm run eval:bench` runs the plugin-vs-baseline benchmark (below) and prints its time/cost
   table. Not part of `check` or CI.
-- `bin/orch <subcommand>` runs the CLI from the checkout (`bin/orch doctor`, `bin/orch --help`);
-  `npm link` puts it on `PATH` as `orch`.
+- `bin/orc <subcommand>` runs the CLI from the checkout (`bin/orc doctor`, `bin/orc --help`);
+  `npm link` puts it on `PATH` as `orc`.
 - `npm pack --dry-run` lists what the npm package ships (`files` in `package.json`).
 
 ## Conventions
 
 - Canonical sources are Markdown: `rules/orchestrator.md` and `agents/*.md`. Edit those.
-- Agent descriptions start with `orch workflow:` and never say "use proactively"; activation comes
+- Agent descriptions start with `orc workflow:` and never say "use proactively"; activation comes
   from the injected rules. Keep agent bodies under about 25 lines.
 - Hook scripts are small exported pure functions plus a thin `main`, with environment, filesystem
   and PATH lookup injected so they are testable in-process.
@@ -48,46 +48,46 @@ body (`developer_instructions`). `model` is not mapped, so Codex inherits the us
 
 ## CLI
 
-`bin/orch` is a thin shim; `scripts/orch.mjs` routes subcommands to `scripts/orch-wt.mjs`
-(`orch wt`), `scripts/orch-pane.mjs` (`orch pane`, herdr pane workers; gated on `HERDR_ENV=1`,
-see [ADR-0009](docs/adr/0009-herdr-pane-workers.md)), `scripts/orch-codex.mjs` (`orch codex`),
-`scripts/ccc.mjs` (`orch ccc`, plus the cocoindex-code MCP gate the launchers and the session hook
-share), `scripts/doctor.mjs` (`orch doctor [--json]`), `scripts/status.mjs` (`orch status [--json]`)
-and `scripts/context.mjs` (`orch context`; it shares `scripts/lib/report.mjs` with doctor), and
-runs `orch claude`, `orch update` and `orch eval` itself.
+`bin/orc` is a thin shim; `scripts/orc.mjs` routes subcommands to `scripts/orc-wt.mjs`
+(`orc wt`), `scripts/orc-pane.mjs` (`orc pane`, herdr pane workers; gated on `HERDR_ENV=1`,
+see [ADR-0009](docs/adr/0009-herdr-pane-workers.md)), `scripts/orc-codex.mjs` (`orc codex`),
+`scripts/ccc.mjs` (`orc ccc`, plus the cocoindex-code MCP gate the launchers and the session hook
+share), `scripts/doctor.mjs` (`orc doctor [--json]`), `scripts/status.mjs` (`orc status [--json]`)
+and `scripts/context.mjs` (`orc context`; it shares `scripts/lib/report.mjs` with doctor), and
+runs `orc claude`, `orc update` and `orc eval` itself.
 Each module takes its process, filesystem and spawn dependencies as arguments. See
-[ADR-0005](docs/adr/0005-orch-cli.md).
+[ADR-0005](docs/adr/0005-orc-cli.md).
 
-`orch wt new|merge|remove|list` manages task worktrees (`remove <feature> <task>` abandons one:
-worktree and branch, even unmerged). `orch pane start <feature> <task> --path <wt> --brief <file>`
-and `orch pane wait|prompt|close <task> --path <wt>` drive pane workers; every pane subcommand
+`orc wt new|merge|remove|list` manages task worktrees (`remove <feature> <task>` abandons one:
+worktree and branch, even unmerged). `orc pane start <feature> <task> --path <wt> --brief <file>`
+and `orc pane wait|prompt|close <task> --path <wt>` drive pane workers; every pane subcommand
 needs `--path`, because the herdr agent name hashes the worktree path.
 
-`orch status --json`, `orch doctor --json` and `orch context --json` are a public contract for
+`orc status --json`, `orc doctor --json` and `orc context --json` are a public contract for
 external clients (the Raycast extension): additive fields keep `schemaVersion: 1`, renames and
 removals bump it. See [ADR-0010](docs/adr/0010-json-contract-for-external-clients.md).
 
 ## Codex launcher
 
-`orch codex` (logic in `scripts/orch-codex.mjs`) reuses `readRules` and `buildContext` from
+`orc codex` (logic in `scripts/orc-codex.mjs`) reuses `readRules` and `buildContext` from
 `hooks/session-start.mjs`, so the Codex context cannot drift from the Claude hook. Per-run `-c`
 overrides are used instead of editing `~/.codex/config.toml`. Note that
 `codex exec -s workspace-write` itself persists project trust in `~/.codex/config.toml`.
 
 ## Behaviour evals
 
-`npm run eval` runs `claude plugin eval` over the `evals/*/case.yaml` cases tagged `orch` with
-`--trust-plugin --scaffold --max-cost-usd "${ORCH_EVAL_MAX_COST:-5}" --no-publish`, granting
-`Bash Edit Write` (`run.sh` adds `--tag orch` unless you pass a `--tag`). Set the cost cap with
-`ORCH_EVAL_MAX_COST`, not a second `--max-cost-usd` flag. Each case scaffolds a small node:test
+`npm run eval` runs `claude plugin eval` over the `evals/*/case.yaml` cases tagged `orc` with
+`--trust-plugin --scaffold --max-cost-usd "${ORC_EVAL_MAX_COST:-5}" --no-publish`, granting
+`Bash Edit Write` (`run.sh` adds `--tag orc` unless you pass a `--tag`). Set the cost cap with
+`ORC_EVAL_MAX_COST`, not a second `--max-cost-usd` flag. Each case scaffolds a small node:test
 repo on branch `feat/x` and runs with the plugin and again without it (the baseline arm):
 
 | Case | Expects |
 |---|---|
 | `inline-small` | one-line fix done inline: no Agent call, tests pass |
-| `delegate-multi` | two dependent files + tests: `orch:implementer` spawned, no dispatch, no commit |
-| `batch-small` | two independent but tiny features: no `dispatch`, exactly one `orch:implementer`, two conventional commits, no leftover worktrees |
-| `parallel-dispatch` | two independent substantial modules (bench-large's cron and expr spec, copied by the fixture): `plan` + `dispatch`, 2+ implementers, two `orch wt merge` conventional commits, no leftover worktrees |
+| `delegate-multi` | two dependent files + tests: `orc:implementer` spawned, no dispatch, no commit |
+| `batch-small` | two independent but tiny features: no `dispatch`, exactly one `orc:implementer`, two conventional commits, no leftover worktrees |
+| `parallel-dispatch` | two independent substantial modules (bench-large's cron and expr spec, copied by the fixture): `plan` + `dispatch`, 2+ implementers, two `orc wt merge` conventional commits, no leftover worktrees |
 
 It costs real model usage on your Claude account (a full suite, 12 runs with Opus as the
 orchestrator, took about 9 minutes and $3; `parallel-dispatch` alone is about $1.45) and needs a
@@ -98,7 +98,7 @@ logged-in `claude`, `wt` and git. Narrow it with
 `evals/_support/run.sh` first builds `.eval-plugin/` (gitignored), a copy of the plugin, because
 eval runs differ from a real session:
 
-- Only `EVAL_*` variables reach a run, so the copy's hook commands are prefixed with `ORCH=1`.
+- Only `EVAL_*` variables reach a run, so the copy's hook commands are prefixed with `ORC=1`.
   The hooks' own gate is unchanged.
 - The `ponytail` dependency cannot be installed in the run's isolated home, so the copy's
   manifest drops it.
@@ -112,10 +112,10 @@ eval runs differ from a real session:
 `npm run eval:bench` (`evals/_support/bench.sh`) asks whether the workflow pays off on a task big
 enough to parallelise. It runs the `bench`-tagged cases (`bench-modules`, `bench-large`) through
 `run.sh` with
-`ORCH_EVAL_MAX_COST=20` (unless already set) and `--threshold 0 --judge-model sonnet`, then prints
+`ORC_EVAL_MAX_COST=20` (unless already set) and `--threshold 0 --judge-model sonnet`, then prints
 `evals/_support/summarize.mjs` for the newest results. Extra args pass through
 (`npm run eval:bench -- --runs 1`); `node evals/_support/summarize.mjs <aggregate-result.json>`
-re-prints any older run. `ORCH_EVAL_MAX_COST=20 orch eval --tag bench` also runs the case (`orch
+re-prints any older run. `ORC_EVAL_MAX_COST=20 orc eval --tag bench` also runs the case (`orc
 eval` passes args as-is), but with the behaviour defaults and no table.
 
 It costs real model usage: the first full run (2 runs per arm, Opus orchestrator, Sonnet
@@ -127,7 +127,7 @@ for the full case); `bench-large` (three modules: cron, JSON Schema subset, expr
 evaluator; ~390 reference lines, 73 hidden tests, `three-commits` instead of `four-commits`, so
 outcome weights total 11) has a few minutes per module. Measured: $0.9–1.2 and 2.5–4 minutes per
 run, so about $2.5 with one run per arm or $5 for the full case. Run it alone with its own cap:
-`ORCH_EVAL_MAX_COST=8 npm run eval:bench -- --case bench-large`. Both use the
+`ORC_EVAL_MAX_COST=8 npm run eval:bench -- --case bench-large`. Both use the
 same harness, graders and peek guards below.
 
 The fixture is a repo on `feat/x` with `evals/bench-modules/SPEC.md`: four independent modules

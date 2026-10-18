@@ -1,4 +1,4 @@
-# ADR-0009: herdr pane workers (`orch pane`)
+# ADR-0009: herdr pane workers (`orc pane`)
 
 - Status: accepted
 - Date: 2026-10-15
@@ -14,18 +14,18 @@ through a JSON CLI (`herdr tab|pane|agent ...`).
 
 ## Decision
 
-- Opt-in pane mode: `orch claude --panes` sets `ORCH_PANES=1`; the session-start
-  hook and `orch codex` set the `panes` flag only when `HERDR_ENV=1` too. The
-  flag keeps the `<!-- orch:panes -->` rule line, which points `dispatch` at
-  `skills/dispatch/references/herdr.md`, and adds `orch pane` to the CLI line.
-- `orch pane` (`scripts/orch-pane.mjs`) wraps the herdr CLI and prints JSON:
+- Opt-in pane mode: `orc claude --panes` sets `ORC_PANES=1`; the session-start
+  hook and `orc codex` set the `panes` flag only when `HERDR_ENV=1` too. The
+  flag keeps the `<!-- orc:panes -->` rule line, which points `dispatch` at
+  `skills/dispatch/references/herdr.md`, and adds `orc pane` to the CLI line.
+- `orc pane` (`scripts/orc-pane.mjs`) wraps the herdr CLI and prints JSON:
   - Every subcommand takes `--path <worktree>`. The agent is named
-    `orch-<first 6 hex of sha1(worktree path)>-<task>` (at most 32 chars), so
+    `orc-<first 6 hex of sha1(worktree path)>-<task>` (at most 32 chars), so
     names are unique per worktree and a re-run finds the same agent.
   - `start <feature> <task> --path <worktree> --brief <file> [--kind claude|codex]`
-    opens (or splits, up to a 2x2 grid) an `orch:<feature>` tab, starts the
-    agent with `ORCH=1 ORCH_ROLE=implementer` (and `ORCH_LEVEL`), Claude on
-    sonnet (opus with `ORCH_LEVEL=high`), Codex with
+    opens (or splits, up to a 2x2 grid) an `orc:<feature>` tab, starts the
+    agent with `ORC=1 ORC_ROLE=implementer` (and `ORC_LEVEL`), Claude on
+    sonnet (opus with `ORC_LEVEL=high`), Codex with
     `--sandbox workspace-write`, and prompts it with the implementer
     instructions and its brief. A failed agent start closes the new pane. When
     the agent already exists, `start` only sends the prompt.
@@ -35,21 +35,21 @@ through a JSON CLI (`herdr tab|pane|agent ...`).
     after submission. Both delete the old report first.
   - `wait <task> --path <worktree> [--timeout ms]` (30 minutes by default)
     first waits out a dialog the agent is already blocked on, then waits for a
-    settled state and reads `<worktree>/.orch/report.md`, reporting `evidence`
+    settled state and reads `<worktree>/.orc/report.md`, reporting `evidence`
     with the subagent-stop hook's `hasEvidence`.
   - `prompt` sends follow-ups prefixed `Follow-up:`; `close` closes the pane
-    only when it sits in an `orch:*` tab. Not a cwd check: after
-    `orch wt merge`, worktrunk moves the worktree, and the agent's cwd with
-    it, to `.git/wt/trash/`. `orch wt remove <feature> <task>` drops an
+    only when it sits in an `orc:*` tab. Not a cwd check: after
+    `orc wt merge`, worktrunk moves the worktree, and the agent's cwd with
+    it, to `.git/wt/trash/`. `orc wt remove <feature> <task>` drops an
     abandoned task's worktree and branch.
-- Workers are main sessions, so they carry `ORCH_ROLE=implementer`. A no-commit
-  `ORCH_ROLE` overrides `agent_type` in the guard hook, so a subagent spawned
-  inside a worker (`orch:shipper` included) stays restricted; other values are
-  ignored. `orch claude` and `orch codex` clear `ORCH_ROLE` for a new
-  orchestrator. The session-start hook injects nothing when it is set. `orch wt new` adds `.orch/` to
+- Workers are main sessions, so they carry `ORC_ROLE=implementer`. A no-commit
+  `ORC_ROLE` overrides `agent_type` in the guard hook, so a subagent spawned
+  inside a worker (`orc:shipper` included) stays restricted; other values are
+  ignored. `orc claude` and `orc codex` clear `ORC_ROLE` for a new
+  orchestrator. The session-start hook injects nothing when it is set. `orc wt new` adds `.orc/` to
   `.git/info/exclude`, so reports never land in a merge commit.
 - Every subcommand refuses to run outside herdr (`HERDR_ENV=1`, a workspace id,
-  `herdr` on `PATH`). `orch doctor` shows herdr as an optional line.
+  `herdr` on `PATH`). `orc doctor` shows herdr as an optional line.
 
 ## Consequences
 

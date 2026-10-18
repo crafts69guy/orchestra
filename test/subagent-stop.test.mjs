@@ -29,11 +29,11 @@ function call(env, payload, readFile) {
   const code = run({ env, input, stdout: (s) => (stdout += s), readFile });
   return { code, stdout };
 }
-const stop = (extra) => ({ agent_type: 'orch:implementer', stop_hook_active: false, ...extra });
-const ON = { ORCH: '1' };
+const stop = (extra) => ({ agent_type: 'orc:implementer', stop_hook_active: false, ...extra });
+const ON = { ORC: '1' };
 const SILENT = { code: 0, stdout: '' };
 
-test('run is silent unless ORCH=1', () => {
+test('run is silent unless ORC=1', () => {
   assert.deepEqual(call({}, stop({ last_assistant_message: 'nope' })), SILENT);
 });
 
@@ -54,7 +54,7 @@ test('run allows a complete report, a retry, and other roles', () => {
   assert.deepEqual(call(ON, stop({ last_assistant_message: GOOD })), SILENT);
   assert.deepEqual(call(ON, stop({ stop_hook_active: true, last_assistant_message: 'x' })), SILENT);
   assert.deepEqual(
-    call(ON, stop({ agent_type: 'orch:reviewer', last_assistant_message: 'x' })),
+    call(ON, stop({ agent_type: 'orc:reviewer', last_assistant_message: 'x' })),
     SILENT,
   );
   assert.deepEqual(call(ON, { last_assistant_message: 'x' }), SILENT);
@@ -64,7 +64,7 @@ test('run exits 0 silently on bad or oddly shaped input', () => {
   for (const input of ['', '{nope', 'null']) assert.deepEqual(call(ON, input), SILENT);
 });
 
-test('main wires env, stdin reader and stdout; skips reading without ORCH', () => {
+test('main wires env, stdin reader and stdout; skips reading without ORC', () => {
   const proc = (env) => ({ env, out: '', stdout: { write: (s) => (proc.out += s) } });
   const on = proc(ON);
   main(on, () => JSON.stringify(stop({ last_assistant_message: 'x' })));

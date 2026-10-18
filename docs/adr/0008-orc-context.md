@@ -1,4 +1,4 @@
-# ADR-0008: `orch context`, a static audit of agent context
+# ADR-0008: `orc context`, a static audit of agent context
 
 - Status: accepted
 - Date: 2026-10-15
@@ -15,7 +15,7 @@ compares scopes, or runs without starting a session.
 
 ## Decision
 
-- A separate subcommand, `orch context [--scope user|project|all] [--json]`
+- A separate subcommand, `orc context [--scope user|project|all] [--json]`
   (logic in `scripts/context.mjs`), not a `doctor` flag: `doctor` checks
   prerequisites and fails hard, this is an audit that is mostly warnings.
 - Static only: it reads files and configs for Claude and Codex at user scope,

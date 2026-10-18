@@ -2,9 +2,9 @@ schema_version: "1.1"
 name: batch-small
 description: >-
   Two independent but small features in disjoint files. Parallel dispatch does not pay off at this
-  size, so the orchestrator should hand both to one orch:implementer as a single batched task (no
+  size, so the orchestrator should hand both to one orc:implementer as a single batched task (no
   dispatch skill, no worktrees) and land each as a conventional commit.
-tags: [orch]
+tags: [orc]
 plugins: ["../../.eval-plugin"]
 runs: 2
 context:
@@ -28,14 +28,14 @@ graders:
   - name: no-dispatch
     type: tool_used
     tool: Skill
-    input_match: '"skill"\s*:\s*"(?:orch:)?dispatch"'
+    input_match: '"skill"\s*:\s*"(?:orc:)?dispatch"'
     min: 0
     max: 0
     arm: both
   - name: one-implementer
     type: tool_used
     tool: Agent
-    input_match: '"subagent_type"\s*:\s*"orch:implementer"'
+    input_match: '"subagent_type"\s*:\s*"orc:implementer"'
     min: 1
     max: 1
   - name: two-conventional-commits

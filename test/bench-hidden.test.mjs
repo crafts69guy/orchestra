@@ -9,7 +9,7 @@ import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const CASE = fileURLToPath(new URL('../evals/bench-modules/', import.meta.url));
-const tmp = mkdtempSync(join(tmpdir(), 'orch-bench-'));
+const tmp = mkdtempSync(join(tmpdir(), 'orc-bench-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
 
 test('hidden acceptance suite passes against the reference', () => {

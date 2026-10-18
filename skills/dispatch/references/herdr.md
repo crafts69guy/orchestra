@@ -6,14 +6,14 @@ worktree, visible to the user. Only steps 3 and 4 of the wave change.
 
 - **3. Start.** Write one brief file per task (plan path + task id, Decisions,
   `validate`). Run `start` **one at a time**, never in parallel:
-  `orch pane start <F> <T> --path <path> --brief <file> [--kind claude|codex]`.
+  `orc pane start <F> <T> --path <path> --brief <file> [--kind claude|codex]`.
   - `status: not-sent` → a dialog kept the prompt from being delivered. Tell
     the user which pane needs them; once they clear it, re-run the same
     `start` (it reuses the live agent and only sends the prompt).
   - `status: started` with `state: blocked` → the worker got the prompt and
     then hit a dialog. Tell the user, then wait as usual.
 
-  Then run one `orch pane wait <T> --path <path>` per task as a background
+  Then run one `orc pane wait <T> --path <path>` per task as a background
   command (Claude: Bash `run_in_background`; default timeout 30 minutes). On
   Codex (no background Bash) run each `wait` in the foreground, one per task.
 - **4. Read** each wait result `{task, state, report, evidence}`:
@@ -21,22 +21,22 @@ worktree, visible to the user. Only steps 3 and 4 of the wave change.
     `wait` blocks until they clear the dialog.
   - `state: timeout` → wait again, or look at the pane.
   - `evidence: false` (no report, or no Status/Validation) →
-    `orch pane prompt <T> --path <path> --text "Write your full report."`.
+    `orc pane prompt <T> --path <path> --text "Write your full report."`.
   - Read the report file. Follow-ups go through
-    `orch pane prompt <T> --path <path> --text <t>` or `--file <f>` (max 2
+    `orc pane prompt <T> --path <path> --text <t>` or `--file <f>` (max 2
     rounds; same `not-sent`/`prompted` statuses as `start`), then wait again.
 
 Never answer approval or trust dialogs yourself. Claude workers inherit trust
 from a trusted repo; Codex asks once per repo root and remembers it.
 
-Review (`git -C <path> diff`) and merge (`orch wt merge`) as before. Cleanup:
-after `status: merged` → `orch pane close <T> --path <path>`. An abandoned,
-failed or re-planned task → `orch pane close <T> --path <path>` and
-`orch wt remove <F> <T>`. Before finishing the dispatch, no `orch:*` panes or
+Review (`git -C <path> diff`) and merge (`orc wt merge`) as before. Cleanup:
+after `status: merged` → `orc pane close <T> --path <path>`. An abandoned,
+failed or re-planned task → `orc pane close <T> --path <path>` and
+`orc wt remove <F> <T>`. Before finishing the dispatch, no `orc:*` panes or
 task worktrees may remain.
 
-Reports live in `<path>/.orch/report.md` (git-excluded); `start` and `prompt`
+Reports live in `<path>/.orc/report.md` (git-excluded); `start` and `prompt`
 delete the old one first, so a report is always fresh. Codex workers have no
 guard hook; their `workspace-write` sandbox blocks writes to the shared `.git`.
-Claude workers run with `ORCH_ROLE=implementer`, so the guard denies commits
+Claude workers run with `ORC_ROLE=implementer`, so the guard denies commits
 and pushes, for their subagents too.

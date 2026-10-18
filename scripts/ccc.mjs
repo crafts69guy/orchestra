@@ -14,10 +14,10 @@ export function cccRoot(cwd, { exec, exists }) {
   return top && exists(join(top, ...SETTINGS)) ? top : null;
 }
 
-/** True when ccc should be injected: not `ORCH_CCC=0`, `ccc` on PATH and the git root indexed. */
+/** True when ccc should be injected: not `ORC_CCC=0`, `ccc` on PATH and the git root indexed. */
 export function cccEnabled(env, cwd, { exec, exists, hasCommand }) {
   return (
-    env.ORCH_CCC !== '0' && hasCommand('ccc', env.PATH) && cccRoot(cwd, { exec, exists }) !== null
+    env.ORC_CCC !== '0' && hasCommand('ccc', env.PATH) && cccRoot(cwd, { exec, exists }) !== null
   );
 }
 
@@ -50,18 +50,18 @@ export function ensureMaxFileSize(text) {
 }
 
 /**
- * `orch ccc init [--force]`: index the git root with a standard config. Returns the exit code.
- * `io.spawnExit` is injected (orch-codex imports session-start, which imports this module).
+ * `orc ccc init [--force]`: index the git root with a standard config. Returns the exit code.
+ * `io.spawnExit` is injected (orc-codex imports session-start, which imports this module).
  */
 export function run(args, io) {
   const [sub, ...flags] = args;
   if (sub !== 'init') {
-    io.stderr('usage: orch ccc init [--force]\n');
+    io.stderr('usage: orc ccc init [--force]\n');
     return 1;
   }
   const top = io.exec('git', ['rev-parse', '--show-toplevel'], io.cwd);
   if (top.status !== 0) {
-    io.stderr('orch ccc: not inside a git repository\n');
+    io.stderr('orc ccc: not inside a git repository\n');
     return 1;
   }
   const root = top.stdout.trim();
@@ -72,7 +72,7 @@ export function run(args, io) {
     const files = io.exec('git', ['ls-files'], root).stdout.split('\n').filter(Boolean).length;
     // ponytail: fixed threshold, make it configurable if it bites
     if (files < MIN_FILES && !flags.includes('--force')) {
-      io.stderr(`orch ccc: small repo (${files} files): use rg; pass --force to index anyway\n`);
+      io.stderr(`orc ccc: small repo (${files} files): use rg; pass --force to index anyway\n`);
       return 1;
     }
     const code = spawn('ccc', ['init']);
@@ -82,7 +82,7 @@ export function run(args, io) {
   const next = ensureMaxFileSize(text);
   if (next !== text) {
     io.write(settings, next);
-    io.stdout('orch ccc: added max_file_size: 256KB to settings.yml\n');
+    io.stdout('orc ccc: added max_file_size: 256KB to settings.yml\n');
   }
   return spawn('ccc', ['index']);
 }

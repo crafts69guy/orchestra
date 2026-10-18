@@ -17,7 +17,7 @@ import {
   summarize,
 } from '../evals/_support/summarize.mjs';
 
-const tmp = mkdtempSync(join(tmpdir(), 'orch-summarize-'));
+const tmp = mkdtempSync(join(tmpdir(), 'orc-summarize-'));
 after(() => rmSync(tmp, { recursive: true, force: true }));
 
 const r = (score, durationSeconds, costUsd, extra = {}) => ({

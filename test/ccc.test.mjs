@@ -20,7 +20,7 @@ test('cccRoot needs a git toplevel holding settings.yml', () => {
   assert.equal(cccRoot('/x', { exec: () => ({ status: 0, stdout: '\n' }), exists }), null);
 });
 
-test('cccEnabled short-circuits on ORCH_CCC, then ccc on PATH, then the index', () => {
+test('cccEnabled short-circuits on ORC_CCC, then ccc on PATH, then the index', () => {
   const calls = [];
   const deps = {
     exec: () => {
@@ -33,7 +33,7 @@ test('cccEnabled short-circuits on ORCH_CCC, then ccc on PATH, then the index', 
       return true;
     },
   };
-  assert.equal(cccEnabled({ ORCH_CCC: '0' }, '/repo', deps), false);
+  assert.equal(cccEnabled({ ORC_CCC: '0' }, '/repo', deps), false);
   assert.deepEqual(calls, []);
   assert.equal(cccEnabled({ PATH: '/bin' }, '/repo', deps), true);
   assert.deepEqual(calls, ['has', 'exec']);
@@ -109,7 +109,7 @@ test('run rejects anything but init', () => {
   const io = fakeIo();
   assert.equal(run([], io), 1);
   assert.equal(run(['index'], io), 1);
-  assert.match(io.err, /usage: orch ccc init/);
+  assert.match(io.err, /usage: orc ccc init/);
 });
 
 test('run fails outside a git repo', () => {

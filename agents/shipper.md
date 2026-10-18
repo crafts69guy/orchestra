@@ -1,6 +1,6 @@
 ---
 name: shipper
-description: "orch workflow: commits, pushes and opens PRs after review is done. Handles only git and GitHub."
+description: "orc workflow: commits, pushes and opens PRs after review is done. Handles only git and GitHub."
 model: haiku
 effort: low
 maxTurns: 15
