@@ -1,5 +1,13 @@
 # Orchestra
 
+[![npm][npm-badge]][npm] [![ci][ci-badge]][ci] [![coverage][cov-badge]](AGENTS.md#coverage-rule)
+
+[npm-badge]: https://img.shields.io/npm/v/@crafts69guy/orchestra
+[npm]: https://www.npmjs.com/package/@crafts69guy/orchestra
+[ci-badge]: https://github.com/crafts69guy/orchestra/actions/workflows/ci.yml/badge.svg?branch=main
+[ci]: https://github.com/crafts69guy/orchestra/actions/workflows/ci.yml
+[cov-badge]: https://img.shields.io/badge/coverage-%E2%89%A598%25-brightgreen
+
 Orchestra (plugin name `orc`) is a cross-harness orchestration workflow for Claude Code and
 Codex. A main agent scopes, delegates, reviews and ships work through four specialised subagents
 (`scoper`, `implementer`, `reviewer`, `shipper`), running independent tasks in parallel git
