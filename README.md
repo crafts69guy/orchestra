@@ -50,6 +50,7 @@ codex plugin add orc@orchestra
 |---|---|
 | `orc doctor [--json]` | checks Node, git, `wt`, the harness CLIs and the installed plugins |
 | `orc status [--json]` | one line per plan task (`.scratch/<feature>/plan.md`) with its worktree, pane agent state and report status |
+| `orc inkdrop init\|inbox\|claim\|push\|pull ...` | mirrors a feature into an Inkdrop note (Inkdrop, below) |
 | `orc context [--scope user\|project\|all] [--json]` | audits what Claude Code and Codex load into context (memory, skills, agents, plugins, MCP): token estimates and findings |
 | `orc claude [--yolo] [--level high] [--panes] [args...]` | starts `claude` with `ORC=1` and `--model opus` (unless you pass `--model`) |
 | `orc codex [--yolo] [args...]` | starts `codex` with `ORC=1` and the orchestration context (below) |
@@ -87,6 +88,51 @@ so is the orchestrator's own model. `--level default` (or no flag) keeps the age
 `codex` session in a herdr pane of an `orc:<feature>` tab, inside its worktree, so you can watch
 and step into each one. Workers write their report to `<worktree>/.orc/report.md` (git-excluded).
 Outside herdr the flag has no effect. See [ADR-0009](docs/adr/0009-herdr-pane-workers.md).
+
+## Inkdrop
+
+Optional: share each feature with [Inkdrop](https://www.inkdrop.app) as one note. Turn on the
+local server (Preferences → Local Server) and export the same variables the Inkdrop MCP server
+uses. In fish, put them in an untracked file such as `~/.config/fish/conf.d/inkdrop.local.fish`:
+
+```fish
+set -gx INKDROP_LOCAL_SERVER_URL http://localhost:19840   # optional; loopback hosts only
+set -gx INKDROP_LOCAL_USERNAME <username>
+set -gx INKDROP_LOCAL_PASSWORD <password>
+```
+
+Don't use `set -U` if your dotfiles track `fish_variables`: the password would end up in the
+repo. Then map the repo to a notebook (default: the repo directory name, matched
+case-insensitively; `--create` makes it) and create the `orc` tag:
+
+```sh
+orc inkdrop init [--book <name>] [--create]
+```
+
+Four flows, each driven by the orchestrator once the session context names the notebook:
+
+- **Inbox:** write a note tagged `orc` with status `active`; `orc inkdrop inbox` lists it and
+  `orc inkdrop claim <note-id> <feature>` turns it into the request.
+- **Mirror:** `orc inkdrop push <feature>` writes a managed block (decisions, a checkbox per task,
+  merges checked) below your text, and `orc wt merge` pushes again. `orc inkdrop pull <feature>`
+  reports whether you edited the spec.
+- **Capture:** `orc inkdrop push <feature> --done` adds `.scratch/<feature>/log.md` and marks the
+  note completed.
+- **Recall:** with the Inkdrop MCP server connected, the orchestrator and `scoper` search the
+  notebook before scoping.
+
+orc only rewrites its own block and never deletes. A note whose markers are damaged (an
+unterminated begin, two blocks) is refused, never guessed at: fix it in Inkdrop. `orc doctor`
+checks the server. `ORC_INKDROP=0` turns the integration off (no rule lines, no notebook in the
+context, no push after `orc wt merge`; merges are still recorded for `orc status`); any other
+value keeps it on. See [ADR-0011](docs/adr/0011-inkdrop-feature-note.md).
+
+Verify once, with Inkdrop running:
+
+1. `orc doctor` shows `✓ inkdrop` with the notebook.
+2. `orc inkdrop claim <note-id> demo`, then `orc inkdrop push demo`.
+3. Edit the spec in Inkdrop; `orc inkdrop pull demo` shows `changed: yes`.
+4. Inkdrop's preview hides the `<!-- orc:begin -->` and `<!-- orc:end -->` markers.
 
 ## Codex
 

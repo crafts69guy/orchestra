@@ -4,7 +4,7 @@ description: "orc workflow: read-only scoping of a non-trivial task in unfamilia
 model: haiku
 effort: low
 maxTurns: 30
-tools: Read, Grep, Glob, Bash, mcp__cocoindex-code__search, ToolSearch
+tools: Read, Grep, Glob, Bash, mcp__cocoindex-code__search, mcp__inkdrop__search-notes, mcp__inkdrop__read-note, ToolSearch
 disallowedTools: Write, Edit
 ---
 

@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { agentName } from '../scripts/orc-pane.mjs';
-import { collect, formatText, parseBase, parseTasks, run } from '../scripts/status.mjs';
+import {
+  collect,
+  formatText,
+  mainRoot,
+  parseBase,
+  parseTasks,
+  recordMerge,
+  run,
+} from '../scripts/status.mjs';
 
 // Shaped like the real .scratch/p5 and ccc-integration plans: multi-line `files:` flow lists,
 // block-list `decisions:` with nested `- key: value` lines, a parenthetical after the base.
@@ -118,9 +126,9 @@ const agentGet = (state) =>
 const NOT_FOUND = JSON.stringify({ error: { code: 'agent_not_found', message: 'x' } });
 const notFound = ok(NOT_FOUND);
 const notFoundExit1 = { status: 1, stdout: '', stderr: NOT_FOUND };
-const T1 = `${ROOT}/.worktrees/p5--T1`;
-const T2 = `${ROOT}/.worktrees/p5--T2`;
-const T9 = `${ROOT}/.worktrees/p5--T9`;
+const T1 = `${ROOT}/.worktrees/feat/x--T1`;
+const T2 = `${ROOT}/.worktrees/feat/x--T2`;
+const T9 = `${ROOT}/.worktrees/feat/x--T9`;
 
 /**
  * Fake deps: `routes` maps "cmd arg ..." to an exec result (unknown commands exit 127); `files`
@@ -161,7 +169,13 @@ test('collect joins plan tasks with worktrees, herdr agents and reports', () => 
   const deps = fake({
     routes: {
       ...GIT,
-      'wt list --format=json': wtList('p5--T1', 'p5--T2', 'p5--T9', 'other--T1'),
+      'wt list --format=json': wtList(
+        'feat/x--T1',
+        'feat/x--T2',
+        'feat/x--T9',
+        'p5--T3',
+        'other--T1',
+      ),
       [`herdr agent get ${agentName('T1', T1)}`]: agentGet('blocked'),
       [`herdr agent get ${agentName('T2', T2)}`]: notFound,
       [`herdr agent get ${agentName('T9', T9)}`]: ok('{"result":{"agent":{}}}'),
@@ -184,47 +198,106 @@ test('collect joins plan tasks with worktrees, herdr agents and reports', () => 
         feature: 'p5',
         base: 'feat/x',
         plan: `${ROOT}/.scratch/p5/plan.md`,
+        note: null,
         tasks: [
           {
             id: 'T1',
             goal: 'bin/orc dispatcher with claude/codex/wt',
             size: 'large',
             dependsOn: [],
-            branch: 'p5--T1',
+            branch: 'feat/x--T1',
             worktree: T1,
             agent: { name: agentName('T1', T1), state: 'blocked' },
             report: { status: 'done' },
+            merged: null,
           },
           {
             id: 'T2',
             goal: 'orc doctor prerequisite checks',
             size: null,
             dependsOn: ['T1', 'T0'],
-            branch: 'p5--T2',
+            branch: 'feat/x--T2',
             worktree: T2,
             agent: null,
             report: null,
+            merged: null,
           },
           {
             id: 'T9',
             goal: null,
             size: null,
             dependsOn: [],
-            branch: 'p5--T9',
+            branch: 'feat/x--T9',
             worktree: T9,
             agent: null,
             report: null,
+            merged: null,
           },
         ],
       },
-      { feature: 'zeta', base: null, plan: `${ROOT}/.scratch/zeta/plan.md`, tasks: [] },
+      {
+        feature: 'zeta',
+        base: null,
+        plan: `${ROOT}/.scratch/zeta/plan.md`,
+        note: null,
+        tasks: [],
+      },
     ],
   });
 });
 
+test('collect reads merged commits and the linked note; bad inkdrop.json is null', () => {
+  const files = {
+    ...FILES,
+    [`${ROOT}/.scratch/p5/merged`]: 'T1 aaa\n\nT1 bbb\nbroken\n',
+    [`${ROOT}/.scratch/p5/inkdrop.json`]: '{"noteId":"note:abc","specHash":"x"}',
+    [`${ROOT}/.scratch/zeta/inkdrop.json`]: '{not json',
+  };
+  const { result } = collect(fake({ routes: GIT, files }), ROOT);
+  const [p5, zeta] = result.features;
+  assert.equal(p5.note, 'note:abc');
+  assert.deepEqual(p5.tasks[0].merged, { commit: 'bbb' }, 'the last line per task wins');
+  assert.equal(p5.tasks[1].merged, null);
+  assert.equal(zeta.note, null);
+  for (const bad of ['{"noteId":42}', '{"noteId":"book:x"}', 'null']) {
+    const f = { ...FILES, [`${ROOT}/.scratch/p5/inkdrop.json`]: bad };
+    assert.equal(collect(fake({ routes: GIT, files: f }), ROOT).result.features[0].note, null);
+  }
+});
+
+test('mainRoot is the parent of the common dir, null outside git', () => {
+  assert.equal(mainRoot(fake({ routes: GIT }), T1), ROOT);
+  assert.equal(mainRoot(fake(), '/tmp/x'), null);
+});
+
+test('recordMerge appends "<task> <commit>" to the feature merged file', () => {
+  const writes = [];
+  recordMerge({ appendFile: (p, s) => writes.push([p, s]) }, ROOT, 'p5', 'T1', 'abc123');
+  assert.deepEqual(writes, [[`${ROOT}/.scratch/p5/merged`, 'T1 abc123\n']]);
+});
+
+test('tasks join worktrees on <base branch>--<task>, else <feature>--<task>', () => {
+  const files = {
+    [`${ROOT}/.scratch/x/plan.md`]: 'Base branch: feat/x\n\n## Tasks\n\n```yaml\n- id: T1\n```\n',
+    [`${ROOT}/.scratch/zeta/plan.md`]: '## Tasks\n\n```yaml\n- id: T1\n```\n',
+  };
+  const deps = fake({
+    herdr: false,
+    routes: { ...GIT, 'wt list --format=json': wtList('feat/x--T1', 'x--T1', 'zeta--T1') },
+    files,
+  });
+  deps.readdir = () => ['x', 'zeta'];
+  const [x, zeta] = collect(deps, ROOT).result.features;
+  assert.equal(x.tasks.length, 1, 'x--T1 is not x: its plan merges into feat/x');
+  assert.equal(x.tasks[0].branch, 'feat/x--T1');
+  assert.equal(x.tasks[0].worktree, `${ROOT}/.worktrees/feat/x--T1`);
+  assert.equal(zeta.tasks[0].branch, 'zeta--T1');
+  assert.equal(zeta.tasks[0].worktree, `${ROOT}/.worktrees/zeta--T1`);
+});
+
 test('from inside a task worktree the root is the main checkout', () => {
   const deps = fake({
-    routes: { ...GIT, 'wt list --format=json': wtList('p5--T1') },
+    routes: { ...GIT, 'wt list --format=json': wtList('feat/x--T1') },
     files: FILES,
   });
   const { result } = collect(deps, T1);
@@ -238,7 +311,7 @@ test('a missing herdr agent is null whether herdr exits 0 or 1', () => {
     const deps = fake({
       routes: {
         ...GIT,
-        'wt list --format=json': wtList('p5--T1'),
+        'wt list --format=json': wtList('feat/x--T1'),
         [`herdr agent get ${agentName('T1', T1)}`]: missing,
       },
       files: FILES,
@@ -250,7 +323,7 @@ test('a missing herdr agent is null whether herdr exits 0 or 1', () => {
 test('without herdr on PATH no agent is queried', () => {
   const deps = fake({
     herdr: false,
-    routes: { ...GIT, 'wt list --format=json': wtList('p5--T1') },
+    routes: { ...GIT, 'wt list --format=json': wtList('feat/x--T1') },
     files: FILES,
   });
   const { result } = collect(deps, ROOT);
@@ -281,7 +354,7 @@ test('no .scratch gives no features; outside git is an error', () => {
   });
 });
 
-test('formatText shows agent state, else report, else worktree, else -', () => {
+test('formatText shows merged, else agent state, else report, else worktree, else -', () => {
   const task = (id, extra) => ({ id, worktree: null, agent: null, report: null, ...extra });
   const text = formatText({
     features: [
@@ -292,11 +365,21 @@ test('formatText shows agent state, else report, else worktree, else -', () => {
           task('B', { worktree: '/w/b', report: { status: 'partial' } }),
           task('C', { worktree: '/w/c' }),
           task('D'),
+          task('E', { worktree: '/w/e', agent: { state: 'idle' }, merged: { commit: 'abc' } }),
         ],
       },
     ],
   });
-  assert.equal(text, 'f/A  working  /w/a\nf/B  partial  /w/b\nf/C  worktree  /w/c\nf/D  -  -\n');
+  assert.equal(
+    text,
+    [
+      'f/A  working  /w/a',
+      'f/B  partial  /w/b',
+      'f/C  worktree  /w/c',
+      'f/D  -  -',
+      'f/E  merged  /w/e\n',
+    ].join('\n'),
+  );
   assert.equal(formatText({ features: [] }), 'no features\n');
   assert.equal(formatText({ features: [{ feature: 'f', tasks: [] }] }), 'no tasks\n');
 });

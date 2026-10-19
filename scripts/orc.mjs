@@ -1,14 +1,24 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
+import { parseArgs } from 'node:util';
 import { pluginRoot, which } from '../hooks/session-start.mjs';
 import { run as ccc, cccEnabled, claudeMcpArg } from './ccc.mjs';
 import { run as context } from './context.mjs';
 import { run as doctor } from './doctor.mjs';
+import { run as inkdrop, push as inkdropPush } from './inkdrop.mjs';
 import { run as codex, gitCommonDir, spawnExit } from './orc-codex.mjs';
 import { run as pane } from './orc-pane.mjs';
 import { exec, run as wt, realDeps as wtDeps } from './orc-wt.mjs';
-import { run as status } from './status.mjs';
+import { mainRoot, parseBase, recordMerge, run as status } from './status.mjs';
 
 export const USAGE = `usage: orc <command> [args]
 
@@ -19,6 +29,7 @@ commands:
   pane start|wait|prompt|close ...   drive herdr pane workers (prints JSON; inside herdr only)
   ccc init [--force]       index this repo for semantic search (cocoindex-code)
   status [--json]          show plan tasks with their worktrees, pane agents and reports
+  inkdrop init|inbox|claim|push|pull ...   mirror a feature into an Inkdrop note (local server)
   doctor [--json]          check prerequisites
   context [--scope ...] [--json]   audit what Claude/Codex load into context
   update                   update the npm CLI and the installed Claude/Codex plugins
@@ -112,7 +123,74 @@ export function updateSteps(io) {
   ];
 }
 
-/** Each command takes `(args, io)` and returns the exit code. */
+/** Deps for `inkdrop.mjs` (and the `status.mjs` collector it reuses) from io. */
+function inkdropDeps(io) {
+  return {
+    exec: io.exec,
+    readFile: (p) => io.read(p, 'utf8'),
+    writeFile: io.write,
+    appendFile: io.append,
+    readdir: io.readdir,
+    mkdir: io.mkdir,
+    env: io.env,
+    hasCommand: io.hasCommand,
+    fetch: io.fetch,
+    now: io.now,
+  };
+}
+
+/**
+ * The `.scratch/<feature>` names whose plan merges into `branch` (`Base branch:`), or the dir named
+ * exactly `branch`. `wt merge <F>` takes the branch, `.scratch/` the feature name.
+ */
+function featuresOf(deps, root, branch) {
+  let names = [];
+  try {
+    names = deps.readdir(join(root, '.scratch'));
+  } catch {
+    return [];
+  }
+  return names.filter((name) => {
+    if (name === branch) return true;
+    try {
+      return parseBase(deps.readFile(join(root, '.scratch', name, 'plan.md'))) === branch;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
+ * After `wt merge` succeeds: records the merge for `orc status`, then pushes a linked feature
+ * (`inkdrop.json`) to Inkdrop unless `ORC_INKDROP=0`. Best effort: failures are a stderr line,
+ * never the exit code.
+ */
+async function afterMerge(args, io, { task, commit }) {
+  const options = { yes: { type: 'boolean' }, message: { type: 'string' } };
+  const branch = parseArgs({ args, allowPositionals: true, options }).positionals[1];
+  const deps = inkdropDeps(io);
+  const root = mainRoot(deps, io.cwd);
+  const found = root === null ? [] : featuresOf(deps, root, branch);
+  // Two plans on one branch can share task ids, so neither is guessed.
+  if (found.length > 1) {
+    io.stderr(`orc: merge not recorded: several plans use base ${branch} (${found.join(', ')})\n`);
+  }
+  if (found.length !== 1) return;
+  const [feature] = found;
+  try {
+    recordMerge(deps, root, feature, task, commit);
+  } catch (e) {
+    io.stderr(`orc: recording the merge failed: ${e.message}\n`);
+  }
+  if (io.env.ORC_INKDROP === '0' || !io.exists(join(root, '.scratch', feature, 'inkdrop.json'))) {
+    return;
+  }
+  const r = await inkdropPush(deps, io.cwd, feature);
+  if (r.code !== 0)
+    io.stderr(`orc: inkdrop push failed: ${r.error.replace(/^orc inkdrop: /, '')}\n`);
+}
+
+/** Each command takes `(args, io)` and returns the exit code (or a Promise of it). */
 export const commands = {
   claude(args, io) {
     const { level, rest: afterLevel } = splitLevel(args);
@@ -145,9 +223,10 @@ export const commands = {
     });
   },
   ccc: (args, io) => ccc(args, { ...io, spawnExit }),
-  wt(args, io) {
+  async wt(args, io) {
     const { code, result } = wt(args, io.wtDeps, io.cwd);
     io.stdout(`${JSON.stringify(result)}\n`);
+    if (result.status === 'merged') await afterMerge(args, io, result);
     return code;
   },
   pane(args, io) {
@@ -164,13 +243,13 @@ export const commands = {
     return code;
   },
   /** `--json` prints `{ schemaVersion: 1, checks }` (see ADR-0010); same exit code as text. */
-  doctor(args, io) {
+  async doctor(args, io) {
     const json = args.includes('--json');
     if (args.some((a) => a !== '--json')) {
       io.stderr('usage: orc doctor [--json]\n');
       return 1;
     }
-    const { code, lines, checks } = doctor(io.doctorDeps);
+    const { code, lines, checks } = await doctor(io.doctorDeps);
     io.stdout(
       json ? `${JSON.stringify({ schemaVersion: 1, checks }, null, 2)}\n` : `${lines.join('\n')}\n`,
     );
@@ -185,6 +264,12 @@ export const commands = {
       hasCommand: io.hasCommand,
     };
     const { code, out, err } = status(args, deps, io.cwd);
+    if (out) io.stdout(out);
+    if (err) io.stderr(err);
+    return code;
+  },
+  async inkdrop(args, io) {
+    const { code, out, err } = await inkdrop(args, inkdropDeps(io), io.cwd);
     if (out) io.stdout(out);
     if (err) io.stderr(err);
     return code;
@@ -220,7 +305,7 @@ export const commands = {
   },
 };
 
-/** Returns the process exit code. */
+/** Returns the process exit code, or a Promise of it for async commands. */
 export function run(argv, io, table = commands) {
   const [cmd, ...args] = argv;
   if (cmd === 'help' || cmd === '--help' || cmd === '-h') {
@@ -249,6 +334,10 @@ export function realIo(proc, metaUrl) {
     exists: existsSync,
     read: readFileSync,
     write: writeFileSync,
+    append: appendFileSync,
+    mkdir: (p) => mkdirSync(p, { recursive: true }),
+    fetch: globalThis.fetch,
+    now: () => new Date(),
     unlink: unlinkSync,
     readdir: readdirSync,
     hasCommand: which,
@@ -258,11 +347,11 @@ export function realIo(proc, metaUrl) {
   };
 }
 
-export function main(proc = process, metaUrl = import.meta.url) {
+export async function main(proc = process, metaUrl = import.meta.url) {
   // A reader that closed early (`orc context --json | head`) ends the output, not the process.
   proc.stdout.on('error', (e) => {
     if (e.code !== 'EPIPE') throw e;
     proc.exit(proc.exitCode);
   });
-  proc.exitCode = run(proc.argv.slice(2), realIo(proc, metaUrl));
+  proc.exitCode = await run(proc.argv.slice(2), realIo(proc, metaUrl));
 }

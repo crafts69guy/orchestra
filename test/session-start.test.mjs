@@ -291,3 +291,42 @@ test('run keeps panes lines and names orc pane only with ORC_PANES=1 inside herd
     assert.doesNotMatch(off, /orc pane/);
   }
 });
+
+const INKDROP_ENV = { INKDROP_LOCAL_USERNAME: 'u', INKDROP_LOCAL_PASSWORD: 'p' };
+const inkdropExec = (_cmd, args) =>
+  args[0] === 'config'
+    ? { status: 0, stdout: 'orc.inkdropbook book:B\norc.inkdropbookname Orchestra\n' }
+    : { status: 1, stdout: '' };
+
+test('buildContext names orc inkdrop and the notebook only when the inkdrop flag is set', () => {
+  const rules = 'a\nb <!-- orc:inkdrop -->\n';
+  const on = buildContext(rules, true, '/p/bin/orc', {
+    inkdrop: { name: 'Orchestra', id: 'book:B' },
+  });
+  assert.equal(
+    on,
+    'a\nb\n\norc CLI: /p/bin/orc (use `/p/bin/orc wt new|merge|list` and `/p/bin/orc inkdrop inbox|claim|push|pull`)\nInkdrop notebook: Orchestra (book:B)\n',
+  );
+  const off = buildContext(rules, true, '/p/bin/orc');
+  assert.equal(off, 'a\n\norc CLI: /p/bin/orc (use `/p/bin/orc wt new|merge|list`)\n');
+});
+
+test('run turns inkdrop on with credentials and a mapped notebook, off with ORC_INKDROP=0', () => {
+  const ctx = (env) => {
+    const { deps, out } = harness({
+      root: fixtureRoot('inkdrop', 'a\nb <!-- orc:inkdrop -->\n'),
+      read: readFileSync,
+      exec: inkdropExec,
+    });
+    Object.assign(deps.env, env);
+    run(deps);
+    return JSON.parse(out.stdout).hookSpecificOutput.additionalContext;
+  };
+  const on = ctx(INKDROP_ENV);
+  assert.match(on, /\nb\n/);
+  assert.match(on, /\nInkdrop notebook: Orchestra \(book:B\)\n/);
+  for (const env of [{}, { ...INKDROP_ENV, ORC_INKDROP: '0' }]) {
+    const off = ctx(env);
+    assert.doesNotMatch(off, /\nb\b|orc inkdrop|Inkdrop notebook/);
+  }
+});
