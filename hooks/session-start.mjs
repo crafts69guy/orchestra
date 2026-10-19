@@ -3,6 +3,7 @@ import { accessSync, constants, existsSync, readFileSync, realpathSync } from 'n
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cccEnabled } from '../scripts/ccc.mjs';
+import { inkdropFlag } from '../scripts/inkdrop.mjs';
 import { exec } from '../scripts/orc-wt.mjs';
 
 export const WT_WARNING =
@@ -48,15 +49,20 @@ export function applyMarkers(rules, flags) {
 /**
  * `orcPath` is the absolute `bin/orc`; plugin bin/ is not on PATH under Codex, so name it.
  * `flags.panes` adds `orc pane` to the CLI line (and keeps the `orc:panes` rule line).
+ * `flags.inkdrop` (`{ name, id }` or false) adds `orc inkdrop` and an `Inkdrop notebook:` line.
  */
 export function buildContext(
   rules,
   hasWt,
   orcPath,
-  flags = { docs: true, ccc: false, high: false, panes: false },
+  flags = { docs: true, ccc: false, high: false, panes: false, inkdrop: false },
 ) {
   const pane = flags.panes ? ` and \`${orcPath} pane start|wait|prompt|close\`` : '';
-  const withCli = `${applyMarkers(rules, flags).trimEnd()}\n\norc CLI: ${orcPath} (use \`${orcPath} wt new|merge|list\`${pane})\n`;
+  const ink = flags.inkdrop ? ` and \`${orcPath} inkdrop inbox|claim|push|pull\`` : '';
+  const book = flags.inkdrop
+    ? `Inkdrop notebook: ${flags.inkdrop.name} (${flags.inkdrop.id})\n`
+    : '';
+  const withCli = `${applyMarkers(rules, flags).trimEnd()}\n\norc CLI: ${orcPath} (use \`${orcPath} wt new|merge|list\`${pane}${ink})\n${book}`;
   return hasWt ? withCli : `${withCli}\n${WT_WARNING}\n`;
 }
 
@@ -84,6 +90,7 @@ export function run({ env, root, cwd, read, hasCommand, exec, exists, stdout, st
         high: env.ORC_LEVEL === 'high',
         panes: env.ORC_PANES === '1' && env.HERDR_ENV === '1',
         ccc: cccEnabled(env, cwd, { exec, exists, hasCommand }),
+        inkdrop: inkdropFlag(env, cwd, { exec }),
       }),
     ),
   );

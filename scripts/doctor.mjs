@@ -1,3 +1,4 @@
+import { inkdropConfig, probe as probeInkdrop } from './inkdrop.mjs';
 import { fail, format, info, pass, warn } from './lib/report.mjs';
 import { exec } from './orc-wt.mjs';
 
@@ -54,10 +55,28 @@ export function checkPlugins(deps) {
 }
 
 /**
- * Returns `{ code, lines, checks }`: `checks` are the report objects (see `lib/report.mjs`),
+ * Optional Inkdrop link: info without credentials, warn when the local server does not answer
+ * `GET /`, else the version and the notebook this repo maps to (`deps.cwd`).
+ */
+export async function checkInkdrop(deps) {
+  const env = deps.env ?? {};
+  if (!env.INKDROP_LOCAL_USERNAME || !env.INKDROP_LOCAL_PASSWORD) {
+    return info('inkdrop', 'not configured (set INKDROP_LOCAL_USERNAME/PASSWORD)');
+  }
+  const r = await probeInkdrop(env, deps.fetch);
+  if (r.error) return warn('inkdrop', r.error, 'enable Preferences → Local Server');
+  const { book, bookName } = inkdropConfig(deps.cwd, deps);
+  return pass(
+    'inkdrop',
+    `v${r.version}${book ? `, book ${bookName ?? book}` : ', run orc inkdrop init'}`,
+  );
+}
+
+/**
+ * Resolves to `{ code, lines, checks }`: `checks` are the report objects (see `lib/report.mjs`),
  * `lines` their text form. code is 1 when any required check fails. Never throws.
  */
-export function run(deps = realDeps) {
+export async function run(deps = realDeps) {
   const checks = [
     checkNode(deps.nodeVersion),
     checkTool(deps, 'git', ['--version'], 'install git'),
@@ -76,6 +95,7 @@ export function run(deps = realDeps) {
   if (claude.mark !== '✓' && codex.mark !== '✓') {
     checks.push(fail('harness', 'neither claude nor codex found', 'install Claude Code or Codex'));
   }
+  checks.push(await checkInkdrop(deps));
   return {
     code: checks.some((c) => c.mark === '✗') ? 1 : 0,
     lines: checks.map(format),
@@ -83,4 +103,10 @@ export function run(deps = realDeps) {
   };
 }
 
-export const realDeps = { exec, env: process.env, nodeVersion: process.versions.node };
+export const realDeps = {
+  exec,
+  env: process.env,
+  nodeVersion: process.versions.node,
+  cwd: process.cwd(),
+  fetch: globalThis.fetch,
+};

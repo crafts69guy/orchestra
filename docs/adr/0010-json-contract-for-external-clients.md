@@ -20,11 +20,12 @@ orc's join logic into another codebase, untested and free to drift.
     agent state and the worker report's Status line. `.scratch/` is read from
     the main checkout (the parent of the git common dir), also when run inside
     a task worktree. JSON:
-    `{ schemaVersion, root, warnings, features: [{ feature, base, plan, tasks:
-    [{ id, goal, size, dependsOn, branch, worktree, agent, report }] }] }`.
-    Paths are absolute; a missing piece is `null`. Worktrees on
-    `<feature>--<task>` whose task is not in the plan are listed with
-    `goal: null`. A `wt` failure is a `warnings` entry, not an error.
+    `{ schemaVersion, root, warnings, features: [{ feature, base, plan, note, tasks:
+    [{ id, goal, size, dependsOn, branch, worktree, agent, report, merged }] }] }`.
+    Paths are absolute; a missing piece is `null`. Tasks join worktrees on
+    `<base branch>--<task>` (the plan's `Base branch`, else the feature name);
+    those whose task is not in the plan are listed with `goal: null`. A `wt`
+    failure is a `warnings` entry, not an error.
   - `orc doctor --json` prints `{ schemaVersion, checks }`. Each check has
     `status` (`pass`, `fail`, `warn`, `info`) next to `mark`, so clients never
     compare glyphs. The exit code matches text mode.
@@ -50,3 +51,10 @@ orc's join logic into another codebase, untested and free to drift.
   a `schemaVersion` bump and a note in the client.
 - `status` cannot tell a pending task from a merged one: both have no worktree
   (`worktree: null`).
+- Resolved by [ADR-0011](0011-inkdrop-feature-note.md): each merge is recorded and `status`
+  reports task `merged: { commit }`.
+- Task `branch` values follow the plan's Base branch (`feat/x--T1`), as `orc wt new` names them;
+  earlier versions reported `<feature>--<task>`, which matched no worktree when the two differ.
+  Clients matching on `branch` should expect the corrected values.
+- Known limitation: one plan per base branch. Two plans with the same Base branch see each
+  other's worktrees, and `orc wt merge` records neither (it warns instead).

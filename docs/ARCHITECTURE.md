@@ -38,6 +38,7 @@ flowchart LR
   wt["worktrunk (wt)"]
   git[(git repo<br/>+ worktrees)]
   mcp["MCP servers<br/>cocoindex-code (injected) · context7"]
+  ink["Inkdrop<br/>local server · MCP"]
   gh["GitHub"]
 
   user -->|"orc claude / orc codex<br/>(ORC=1)"| orc
@@ -51,6 +52,9 @@ flowchart LR
   user -->|"launchers inject cocoindex-code<br/>when ccc is on PATH and the repo is indexed"| mcp
   subs -.->|"allowlisted tools"| mcp
   subs -->|"shipper only"| gh
+  orc -->|"orc inkdrop: feature note (HTTP, loopback)"| ink
+  user -->|"queues specs, reads progress"| ink
+  subs -.->|"recall: search-notes, read-note"| ink
 ```
 
 ## 3. Repository layout: source of truth and adapters
@@ -102,7 +106,7 @@ orchestra/
 │   ├── session-start.mjs        # ORC gate, rules injection, wt check
 │   ├── guard.mjs                # PreToolUse: push/PR only from shipper
 │   └── subagent-stop.mjs        # implementer evidence gate
-├── bin/orc                     # CLI entry (npm bin): claude, codex, wt, pane, status, doctor, context, update, eval
+├── bin/orc                     # CLI entry (npm bin): claude, codex, wt, pane, status, inkdrop, doctor, context, update, eval
 ├── scripts/
 │   ├── orc.mjs                 # subcommand dispatcher, `orc claude`
 │   ├── ccc.mjs                  # `orc ccc init`, MCP injection gate (cocoindex-code)
@@ -111,6 +115,7 @@ orchestra/
 │   ├── orc-codex.mjs           # `orc codex`: rules, agents, sandbox dirs
 │   ├── doctor.mjs               # `orc doctor`: prerequisite checks
 │   ├── status.mjs               # `orc status`: plan tasks, worktrees, agents, reports (ADR-0010)
+│   ├── inkdrop.mjs              # `orc inkdrop`: feature note in Inkdrop (ADR-0011)
 │   ├── context.mjs              # `orc context`: static audit of loaded context (ADR-0008)
 │   └── gen-codex-agents.mjs, lib/
 ├── test/                        # node:test, ≥98% coverage

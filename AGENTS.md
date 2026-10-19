@@ -67,6 +67,13 @@ needs `--path`, because the herdr agent name hashes the worktree path.
 external clients (the Raycast extension): additive fields keep `schemaVersion: 1`, renames and
 removals bump it. See [ADR-0010](docs/adr/0010-json-contract-for-external-clients.md).
 
+`orc inkdrop init|inbox|claim|push|pull` (`scripts/inkdrop.mjs`) mirrors a feature into one
+Inkdrop note over the local HTTP server, with an injected `fetch` (tests never hit the network).
+It writes only a managed `<!-- orc:begin -->`…`<!-- orc:end -->` block, refuses non-loopback hosts
+and never prints credentials. `orc wt merge` records each merge in `.scratch/<feature>/merged` and
+pushes a linked feature; a push failure is a stderr warning only. See
+[ADR-0011](docs/adr/0011-inkdrop-feature-note.md) and [the API survey](docs/research/inkdrop.md).
+
 ## Codex launcher
 
 `orc codex` (logic in `scripts/orc-codex.mjs`) reuses `readRules` and `buildContext` from

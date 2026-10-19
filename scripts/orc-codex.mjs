@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { basename, join } from 'node:path';
 import { buildContext, readRules } from '../hooks/session-start.mjs';
 import { cccEnabled, codexMcpArgs } from './ccc.mjs';
+import { inkdropFlag } from './inkdrop.mjs';
 
 const DESCRIPTION = /^description = ("(?:[^"\\]|\\.)*")$/m;
 
@@ -83,6 +84,7 @@ export function run({
     docs: env.ORC_DOCS !== '0',
     ccc,
     panes: env.ORC_PANES === '1' && env.HERDR_ENV === '1',
+    inkdrop: inkdropFlag(env, cwd, { exec }),
   });
   const prefix = buildArgs({
     context,

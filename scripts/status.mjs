@@ -51,20 +51,60 @@ function reportStatus(deps, path) {
 }
 
 /**
+ * The main checkout of `cwd`: the parent of the git common dir, also from inside a task worktree
+ * (plans live in its `.scratch/`, not the worktree's). Null outside a git repo. `deps.exec` never
+ * throws.
+ */
+export function mainRoot(deps, cwd) {
+  const common = deps.exec('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd);
+  if (common.status !== 0 || !common.stdout.trim()) return null;
+  return dirname(common.stdout.trim());
+}
+
+/** Records a merged task: appends `<task> <commit>` to `<root>/.scratch/<feature>/merged`. */
+export function recordMerge(deps, root, feature, task, commit) {
+  deps.appendFile(join(root, '.scratch', feature, 'merged'), `${task} ${commit}\n`);
+}
+
+/** `{ <task>: commit }` from a feature's `merged` file (last line per task wins), {} if missing. */
+function readMerged(deps, dir) {
+  let text = '';
+  try {
+    text = deps.readFile(join(dir, 'merged'));
+  } catch {
+    // never merged
+  }
+  const merged = {};
+  for (const line of text.split('\n')) {
+    const [task, commit] = line.trim().split(/\s+/);
+    if (task && commit) merged[task] = commit;
+  }
+  return merged;
+}
+
+/** The feature's linked Inkdrop note id from `inkdrop.json`, null when missing or invalid. */
+function readNote(deps, dir) {
+  try {
+    const { noteId } = JSON.parse(deps.readFile(join(dir, 'inkdrop.json')));
+    return typeof noteId === 'string' && noteId.startsWith('note:') ? noteId : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Collects the state of every `<root>/.scratch/<feature>/plan.md`, `root` being the main checkout
  * (the parent of the git common dir, also from inside a task worktree): tasks joined with their `wt`
- * worktrees, herdr agents and worker reports. Live worktrees not in the plan are kept as tasks
- * with `goal: null`. A `wt` failure is a warning, not an error. Returns `{ code, result }` or
- * `{ code: 1, error }` outside a git repo. `deps`: `exec` (never throws), `readdir`,
+ * worktrees (branches `<base>--<task>`, `<base>` being the plan's `Base branch`, else the feature
+ * name, as `orc wt new <base>` creates them), herdr agents and worker reports. Live worktrees not
+ * in the plan are kept as tasks with `goal: null`. Tasks carry `merged: { commit } | null` (from `<feature>/merged`), features
+ * `note` (the `inkdrop.json` noteId, else null). A `wt` failure is a warning, not an error.
+ * Returns `{ code, result }` or `{ code: 1, error }` outside a git repo. `deps`: `exec` (never throws), `readdir`,
  * `readFile` (utf8), `env`, `hasCommand(name, PATH)`.
  */
 export function collect(deps, cwd) {
-  // The main checkout, even from a task worktree: plans live in its .scratch/, not the worktree's.
-  const common = deps.exec('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd);
-  if (common.status !== 0 || !common.stdout.trim()) {
-    return { code: 1, error: `orc status: not a git repository: ${cwd}` };
-  }
-  const root = dirname(common.stdout.trim());
+  const root = mainRoot(deps, cwd);
+  if (root === null) return { code: 1, error: `orc status: not a git repository: ${cwd}` };
   const warnings = [];
   const herdrOn = deps.hasCommand('herdr', deps.env.PATH);
   let names = [];
@@ -88,7 +128,11 @@ export function collect(deps, cwd) {
       // `error` can be '' (wt failed silently), so test for `items`
       if (!found.items) warnings.push(`wt list failed; worktrees unknown: ${found.error.trim()}`);
     }
-    const trees = found.items ? featureTasks(found.items, feature) : [];
+    const base = parseBase(text);
+    const branchOf = base ?? feature;
+    const trees = found.items ? featureTasks(found.items, branchOf) : [];
+    const dir = join(root, '.scratch', feature);
+    const merges = readMerged(deps, dir);
     const planned = parseTasks(text);
     const extra = trees
       .filter((w) => !planned.some((t) => t.id === w.task))
@@ -103,21 +147,25 @@ export function collect(deps, cwd) {
         if (!got.error) agent = { name, state: got.state };
       }
       const report = worktree ? reportStatus(deps, worktree) : null;
-      return { ...t, branch: taskBranch(feature, t.id), worktree, agent, report };
+      const merged = Object.hasOwn(merges, t.id) ? { commit: merges[t.id] } : null;
+      return { ...t, branch: taskBranch(branchOf, t.id), worktree, agent, report, merged };
     });
-    features.push({ feature, base: parseBase(text), plan, tasks });
+    features.push({ feature, base, plan, note: readNote(deps, dir), tasks });
   }
   return { code: 0, result: { schemaVersion: 1, root, warnings, features } };
 }
 
 /**
- * One line per task: `feature/id  <state>  <worktree or ->`; `no features` without plans,
- * `no tasks` when the plans list none.
+ * One line per task: `feature/id  <state>  <worktree or ->` (state `merged` once merged, else the
+ * agent state, report status or `worktree`); `no features` without plans, `no tasks` when the plans
+ * list none.
  */
 export function formatText(result) {
   const lines = result.features.flatMap(({ feature, tasks }) =>
     tasks.map((t) => {
-      const state = t.agent?.state ?? t.report?.status ?? (t.worktree ? 'worktree' : '-');
+      const state = t.merged
+        ? 'merged'
+        : (t.agent?.state ?? t.report?.status ?? (t.worktree ? 'worktree' : '-'));
       return `${feature}/${t.id}  ${state}  ${t.worktree ?? '-'}`;
     }),
   );

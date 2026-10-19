@@ -184,3 +184,22 @@ test('run sets the panes flag only with ORC_PANES=1 inside herdr', () => {
   assert.match(on, /pane start\|wait\|prompt\|close/);
   assert.doesNotMatch(instructions({ ORC_PANES: '1' }), /pane start/);
 });
+
+test('run sets the inkdrop flag from credentials and the git config mapping', () => {
+  const instructions = (env) => {
+    const { deps, out } = harness({
+      root: fixtureRoot('inkdrop', 'a\nb <!-- orc:inkdrop -->\n'),
+      env: { PATH: '/bin', ...env },
+      exec: (_cmd, args) =>
+        args[0] === 'config'
+          ? { status: 0, stdout: 'orc.inkdropbook book:B\norc.inkdropbookname Orchestra\n' }
+          : { status: 1, stdout: '' },
+    });
+    run(deps);
+    return JSON.parse(out.spawned.args[1].slice('developer_instructions='.length));
+  };
+  const on = instructions({ INKDROP_LOCAL_USERNAME: 'u', INKDROP_LOCAL_PASSWORD: 'p' });
+  assert.match(on, /\nb\n/);
+  assert.match(on, /inkdrop inbox\|claim\|push\|pull`\)\nInkdrop notebook: Orchestra \(book:B\)\n/);
+  assert.doesNotMatch(instructions({}), /\nb\b|Inkdrop/);
+});
