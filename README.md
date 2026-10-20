@@ -15,6 +15,47 @@ worktrees.
 
 The rules are always-on but opt-in: they are injected at session start only when `ORC=1`.
 
+## Architecture
+
+```mermaid
+flowchart LR
+  user([Developer]) -->|"orc claude / orc codex<br/>(ORC=1)"| ss
+  subgraph plugin["orc plugin"]
+    ss["SessionStart hook<br/>rules + lessons"]
+    guard["PreToolUse guard<br/>push / PR only from shipper"]
+    gate["SubagentStop gate<br/>implementer must report Validation"]
+  end
+  ss --> orc["Orchestrator<br/>(main thread)"]
+  orc -->|"unfamiliar code"| scoper["scoper<br/>read-only brief"]
+  orc -->|"one task"| impl["implementer<br/>feature branch"]
+  orc -->|"plan skill"| plan[(".scratch/FEATURE/plan.md")]
+  plan -->|"dispatch skill"| wts["implementers<br/>one git worktree each (wt)"]
+  impl & wts --> review["orchestrator review<br/>+ reviewer when risky"]
+  review -->|"user asks to ship"| shipper["shipper<br/>commit · push · PR"]
+  review -->|"Capture"| reflect["reflect skill<br/>log.md → lesson deltas"]
+  reflect -->|"user approves rows"| lessons[(".orc/lessons.md")]
+  lessons -->|"next session"| ss
+  guard -.->|"enforces"| impl & wts & shipper
+  gate -.->|"enforces"| impl & wts
+  guard & gate -.->|"signals"| reflect
+```
+
+- **One source, two harnesses.** Rules, agents and skills are Markdown; one set of Node hooks
+  serves Claude Code and Codex. Codex agents are generated TOML, and `orc codex` injects the same
+  context the hook does.
+- **Soft rules, hard hooks.** The rules decide when to scope, delegate, plan and dispatch; the
+  hooks enforce the few things that must never go wrong.
+- **Parallel only when it pays.** `dispatch` runs only 2+ independent, substantial tasks in
+  worktrees; small ones are batched into one implementer
+  ([ADR-0006](docs/adr/0006-dispatch-threshold.md)).
+- **Learns per repo.** Approved lessons are fed back into every later session; lessons about orc
+  itself become rule edits only behind a failing-then-passing eval
+  ([ADR-0013](docs/adr/0013-self-improvement-loop.md)).
+- **Optional integrations:** Inkdrop feature notes, cocoindex-code semantic search, herdr pane
+  workers.
+
+Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Requirements
 
 - Node.js 22.8 or newer (hooks and the CLI are plain Node scripts, zero runtime dependencies).
