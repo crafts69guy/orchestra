@@ -21,14 +21,15 @@ Subagents: `scoper`, `implementer`, `reviewer`, `shipper`. On Claude Code call t
 - **Mirror:** after writing plan.md run `orc inkdrop push <feature>` (merges push automatically); before each dispatch wave run `orc inkdrop pull <feature>` and adapt the plan if the spec changed. <!-- orc:inkdrop -->
 - **Review:** review every implementer diff yourself and rerun its validation. Use `reviewer` (fresh context: diff, brief, acceptance criteria) for risky changes (security, concurrency, migrations, public APIs) or on request. At most 2 fix rounds.
   Also check the Docs/JSDoc criterion. <!-- orc:docs -->
-- **Capture:** when the feature is done, write `.scratch/<feature>/log.md` (≤30 lines: outcome, decisions, commits, follow-ups, gotchas), then run `orc inkdrop push <feature> --done`. <!-- orc:inkdrop -->
+- **Capture:** when the feature is done, write `.scratch/<feature>/log.md` (≤30 lines: outcome, decisions, commits, follow-ups, gotchas), then run the `reflect` skill: it proposes lesson changes for the user to approve.
+  Then run `orc inkdrop push <feature> --done`. <!-- orc:inkdrop -->
 - **Shipping:** delegate commit, push and PR to `shipper` only after review passes and the user asked to ship.
 - **Stays with you:** scope, architecture, cross-cutting decisions, root-cause analysis, merge conflicts, escalations.
 
 ## Handoff brief
 
 Subagents do not see this conversation. Decide interfaces, names and libraries before delegating, then send:
-objective · decisions already made · files in scope and out of scope · constraints · validation command · stop conditions.
+objective · decisions already made · lessons that apply · files in scope and out of scope · constraints · validation command · stop conditions.
 Docs/JSDoc: new or changed exported types, functions and their fields carry JSDoc in the repo's doc style, and docs the change touches (ADRs, glossary, guides) are updated; the orchestrator checks this when reviewing the diff. <!-- orc:docs -->
 Point to the plan/brief file and section instead of restating it. Pass paths and commit SHAs, not "what we discussed".
 

@@ -11,6 +11,7 @@
     "coverage/**",
     ".worktrees/**",
     ".scratch/**",
+    ".orc/**",
     ".eval-plugin/**",
     "evals/results/**"
   ]

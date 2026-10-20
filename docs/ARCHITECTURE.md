@@ -98,14 +98,15 @@ orchestra/
 ├── rules/orchestrator.md        # always-on orchestration rules
 ├── skills/
 │   ├── plan/SKILL.md            # plan.md schema
-│   └── dispatch/                # waves, worktrees, spawn, merge
-│       ├── SKILL.md
-│       └── references/{claude,codex}.md
+│   ├── dispatch/                # waves, worktrees, spawn, merge
+│   │   ├── SKILL.md
+│   │   └── references/{claude,codex,herdr}.md
+│   └── reflect/                 # lessons deltas; references/promote.md (ADR-0013)
 ├── hooks/
 │   ├── hooks.json               # shared by both harnesses
 │   ├── session-start.mjs        # ORC gate, rules injection, wt check
 │   ├── guard.mjs                # PreToolUse: push/PR only from shipper
-│   └── subagent-stop.mjs        # implementer evidence gate
+│   └── subagent-stop.mjs        # implementer evidence gate (blocks → .orc/signals.jsonl)
 ├── bin/orc                     # CLI entry (npm bin): claude, codex, wt, pane, status, inkdrop, doctor, context, update, eval
 ├── scripts/
 │   ├── orc.mjs                 # subcommand dispatcher, `orc claude`
@@ -278,6 +279,24 @@ branch. Parallel worktrees were no faster on tiny modules at +45% cost, and
 21% faster on large ones at +22% cost
 ([benchmarks](research/benchmarks.md), [ADR-0006](adr/0006-dispatch-threshold.md)).
 
+### Learning loop
+
+Capture closes with the `reflect` skill
+([ADR-0013](adr/0013-self-improvement-loop.md)):
+
+```mermaid
+flowchart LR
+  ev["log.md gotchas, fix rounds,<br/>corrections, .orc/signals.jsonl"] --> refl["reflect: delta table<br/>ADD · UPVOTE · DOWNVOTE · EDIT · REMOVE"]
+  refl -->|user approves rows| les[".orc/lessons.md<br/>(main checkout, git-excluded)"]
+  les -->|"top 40 by score"| ss["SessionStart / orc codex<br/>Lessons block"]
+  les -->|"orc inkdrop lessons"| ink["Inkdrop notes<br/>tag orc-lesson"]
+  ink -->|"reflect promote (orc repo)"| gate["new eval case RED →<br/>rule edit GREEN → approve"]
+```
+
+`project` lessons stay as injected context; `orc` lessons that recur become
+edits of `rules/`, `agents/` or `skills/`, but only behind a failing-then-passing
+eval case.
+
 ## 8. Parallel dispatch with worktrunk
 
 Worktrees are created explicitly by the orchestrator through worktrunk on both
@@ -378,7 +397,7 @@ flowchart LR
   subgraph soft["Soft: instructions"]
     r1["rules/orchestrator.md<br/>(SessionStart)"]
     r2["agent bodies"]
-    r3["skills: plan, dispatch"]
+    r3["skills: plan, dispatch, reflect"]
     r4["ponytail ruleset<br/>(implementer, reviewer)"]
   end
   subgraph hard["Hard: hooks (P2)"]

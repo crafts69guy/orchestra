@@ -708,7 +708,7 @@ test('inkdrop routes to inkdrop.mjs with io-wired deps; stdout and stderr pass t
   const bad = fakeIo();
   assert.equal(await run(['inkdrop'], bad), 1);
   assert.match(bad.err, /^usage: orc inkdrop init/);
-  assert.match(USAGE, /inkdrop init\|inbox\|claim\|push\|pull/);
+  assert.match(USAGE, /inkdrop init\|inbox\|claim\|push\|pull\|lessons/);
 });
 
 test('realIo wires recursive mkdir, a Date clock and the global fetch', () => {

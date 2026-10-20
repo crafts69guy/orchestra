@@ -57,5 +57,5 @@ a local HTTP server and an official MCP server.
 - Edits the user makes inside the managed block are overwritten by the next push.
 - Recall on Codex needs the Inkdrop MCP configured for Codex (`codex mcp add`); `orc codex` does
   not inject it.
-- Deferred: a `/_changes` watcher, an Inkdrop plugin command ("send to orc"), and promoting log
-  learnings into atomic notes.
+- Deferred: a `/_changes` watcher and an Inkdrop plugin command ("send to orc"). Promoting log
+  learnings into atomic notes is now `orc inkdrop lessons` (ADR-0013).

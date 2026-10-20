@@ -3,6 +3,7 @@ import { basename, join } from 'node:path';
 import {
   buildContext,
   collisionWarning,
+  readLessons,
   readRules,
   scratchDir,
   withWarning,
@@ -92,6 +93,7 @@ export function run({
     panes: env.ORC_PANES === '1' && env.HERDR_ENV === '1',
     inkdrop: inkdropFlag(env, cwd, { exec }),
     scratch: scratchDir(exec, cwd),
+    lessons: readLessons(exec, cwd, read),
   });
   // Codex hooks may be untrusted, so the launcher warns itself; a launch is always a startup.
   const warning = collisionWarning({ env, cwd, exec, source: 'startup' });

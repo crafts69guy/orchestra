@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { test } from 'node:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { BLOCK_REASON, handbackReport, hasEvidence, main, run } from '../hooks/subagent-stop.mjs';
 
+// Not a git repo: a deny/block from main or the script records no signal into this checkout.
+const NO_REPO = mkdtempSync(join(tmpdir(), 'orc-signal-'));
+after(() => rmSync(NO_REPO, { recursive: true, force: true }));
 const script = fileURLToPath(new URL('../hooks/subagent-stop.mjs', import.meta.url));
 const GOOD = 'Status: done\n\nChanges: x\n\nValidation: `npm test` passed\n';
 
@@ -65,7 +71,12 @@ test('run exits 0 silently on bad or oddly shaped input', () => {
 });
 
 test('main wires env, stdin reader and stdout; skips reading without ORC', () => {
-  const proc = (env) => ({ env, out: '', stdout: { write: (s) => (proc.out += s) } });
+  const proc = (env) => ({
+    env,
+    out: '',
+    cwd: () => NO_REPO,
+    stdout: { write: (s) => (proc.out += s) },
+  });
   const on = proc(ON);
   main(on, () => JSON.stringify(stop({ last_assistant_message: 'x' })));
   assert.equal(on.exitCode, 0);
@@ -77,7 +88,12 @@ test('main wires env, stdin reader and stdout; skips reading without ORC', () =>
 });
 
 test('script entrypoint reads stdin end to end', () => {
-  const opts = (env, input) => ({ env: { ...process.env, ...env }, input, encoding: 'utf8' });
+  const opts = (env, input) => ({
+    env: { ...process.env, ...env },
+    input,
+    cwd: NO_REPO,
+    encoding: 'utf8',
+  });
   const blocked = spawnSync(
     process.execPath,
     [script],
@@ -127,4 +143,39 @@ test('run allows a complete SubagentHandback report from the transcript', () => 
   assert.equal(call(ON, p, transcript(handback('all done'))).stdout.includes('block'), true);
   assert.equal(call(ON, p, () => assert.fail).stdout.includes('block'), true);
   assert.equal(call(ON, stop({ last_assistant_message: '' })).stdout.includes('block'), true);
+});
+
+test('run records a no-evidence signal on block only', () => {
+  const appended = [];
+  const signals = {
+    cwd: '/repo',
+    exec: () => ({ status: 0, stdout: '/repo/.git\n' }),
+    mkdir: () => {},
+    append: (p, text) => appended.push([p, JSON.parse(text)]),
+  };
+  const input = (msg) => JSON.stringify(stop({ last_assistant_message: msg }));
+  let out = '';
+  run({ env: ON, input: input('done!'), stdout: (s) => (out += s), signals });
+  assert.deepEqual(JSON.parse(out), { decision: 'block', reason: BLOCK_REASON });
+  assert.equal(appended.length, 1);
+  assert.equal(appended[0][0], '/repo/.orc/signals.jsonl');
+  assert.deepEqual(
+    { ...appended[0][1], ts: undefined },
+    {
+      ts: undefined,
+      kind: 'no-evidence',
+      role: 'implementer',
+      reason: 'missing Status/Validation',
+    },
+  );
+
+  const touch = () => assert.fail('the allow path must not touch git or fs');
+  out = '';
+  run({
+    env: ON,
+    input: input(GOOD),
+    stdout: (s) => (out += s),
+    signals: { cwd: '/repo', exec: touch, mkdir: touch, append: touch },
+  });
+  assert.equal(out, '');
 });

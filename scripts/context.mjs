@@ -1,6 +1,8 @@
 import { dirname, join, resolve } from 'node:path';
 import { parseFrontmatter } from './lib/frontmatter.mjs';
+import { LESSONS_CAP, lessonsPath, parseLessons, selectLessons } from './lib/lessons.mjs';
 import { fail, format, info, warn } from './lib/report.mjs';
+import { mainRoot } from './status.mjs';
 
 export const USAGE = 'usage: orc context [--scope user|project|all] [--json]\n';
 // ponytail: heuristics, not harness limits; tune when real sessions say otherwise.
@@ -237,6 +239,38 @@ export function collect(io, root) {
     return bytes;
   };
 
+  // `.orc/lessons.md` of the main checkout: the SessionStart hook and `orc codex` inject its kept
+  // lines into both harnesses, so it counts as always-loaded for each. Findings go once, on claude.
+  let lessonsFile = lessonsPath(root);
+  try {
+    lessonsFile = lessonsPath(mainRoot(io, io.cwd) ?? root);
+  } catch {
+    // exec failed: keep the git root
+  }
+  const lessons = () => {
+    const t = text(lessonsFile, 'project');
+    if (t === null) return;
+    const { lessons: all, invalid } = parseLessons(t);
+    const { kept, hidden } = selectLessons(all);
+    const chars = kept.reduce((n, l) => n + l.line.length + 1, 0);
+    push('project', 'project', 'memory', short(lessonsFile), lessonsFile, { always: chars });
+    if (harness !== 'claude') return;
+    const problems = [
+      ...(hidden ? [`${kept.length + hidden} active lessons > cap ${LESSONS_CAP}`] : []),
+      ...(invalid.length ? [`invalid lines ${invalid.join(', ')}`] : []),
+    ];
+    if (problems.length) {
+      add(
+        warn(
+          'lessons',
+          `${short(lessonsFile)}: ${problems.join('; ')}`,
+          'run the reflect skill to consolidate',
+        ),
+        'project',
+      );
+    }
+  };
+
   // ---- Claude
   const cdir = join(home, '.claude');
   const userMemory = join(cdir, 'CLAUDE.md');
@@ -252,6 +286,7 @@ export function collect(io, root) {
     }
     if (dirname(d) === d) break;
   }
+  lessons();
   components(cdir, 'user', 'user');
   if (root !== home) components(join(root, '.claude'), 'project', 'project');
   const userSettings = join(cdir, 'settings.json');
@@ -307,6 +342,7 @@ export function collect(io, root) {
   const limit = Number(cfg.top.project_doc_max_bytes) || DEFAULT_DOC_BYTES;
   let bytes = 0;
   for (const d of chain) bytes += memory(join(d, pick(d)), 'project', 'project');
+  lessons();
   if (bytes > limit) {
     add(
       fail(

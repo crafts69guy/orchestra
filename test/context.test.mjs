@@ -393,3 +393,53 @@ test('skill over 500 lines is flagged', () => {
   const files = { [`${HOME}/.claude/skills/big/SKILL.md`]: skill('d', 'l\n'.repeat(500)) };
   assert.deepEqual(names(collect(fakeIo(files), ROOT)), ['skill-body-large']);
 });
+
+test('lessons.md of the main root is always-loaded for both harnesses and audited once', () => {
+  const lessonsFile = `${ROOT}/.orc/lessons.md`;
+  const exec = (_cmd, args) => ({
+    status: 0,
+    stdout: args.includes('--git-common-dir') ? `${ROOT}/.git\n` : `${ROOT}.b\n`,
+    stderr: '',
+  });
+  const line = (i, up = 2) => `- [L${String(i).padStart(3, '0')}] +${up} -0 project · f · t${i}`;
+  const ok = [line(1), line(2, 0), '# heading'].join('\n');
+  const clean = collect(fakeIo({ [lessonsFile]: ok }, { exec, cwd: `${ROOT}.b` }), `${ROOT}.b`);
+  const sources = clean.sources.filter((s) => s.path === lessonsFile);
+  assert.deepEqual(
+    sources.map((s) => [s.harness, s.scope, s.kind, s.name, s.always]),
+    [
+      ['claude', 'project', 'memory', '~/proj/.orc/lessons.md', line(1).length + 1],
+      ['codex', 'project', 'memory', '~/proj/.orc/lessons.md', line(1).length + 1],
+    ],
+  );
+  assert.equal(
+    clean.findings.some((f) => f.name === 'lessons'),
+    false,
+  );
+
+  const many = [...Array.from({ length: 42 }, (_, i) => line(i + 1)), '- [bad', '- [L9] x'];
+  const noisy = collect(fakeIo({ [lessonsFile]: many.join('\n') }, { exec }), ROOT);
+  const found = noisy.findings.filter((f) => f.name === 'lessons');
+  assert.deepEqual(
+    found.map((f) => [f.status, f.harness, f.scope, f.detail, f.fix]),
+    [
+      [
+        'warn',
+        'claude',
+        'project',
+        '~/proj/.orc/lessons.md: 42 active lessons > cap 40; invalid lines 43, 44',
+        'run the reflect skill to consolidate',
+      ],
+    ],
+  );
+  const invalidOnly = collect(fakeIo({ [lessonsFile]: '- [x' }, { exec }), ROOT);
+  assert.match(invalidOnly.findings.find((f) => f.name === 'lessons').detail, /: invalid lines 1$/);
+  const capOnly = collect(fakeIo({ [lessonsFile]: many.slice(0, 42).join('\n') }, { exec }), ROOT);
+  assert.match(capOnly.findings.find((f) => f.name === 'lessons').detail, /cap 40$/);
+
+  const throws = () => {
+    throw new Error('no git');
+  };
+  const fallback = collect(fakeIo({ [lessonsFile]: ok }, { exec: throws }), ROOT);
+  assert.equal(fallback.sources.filter((s) => s.path === lessonsFile).length, 2);
+});

@@ -73,12 +73,24 @@ worktree. See [ADR-0012](docs/adr/0012-session-worktrees.md).
 external clients (the Raycast extension): additive fields keep `schemaVersion: 1`, renames and
 removals bump it. See [ADR-0010](docs/adr/0010-json-contract-for-external-clients.md).
 
-`orc inkdrop init|inbox|claim|push|pull` (`scripts/inkdrop.mjs`) mirrors a feature into one
+`orc inkdrop init|inbox|claim|push|pull|lessons` (`scripts/inkdrop.mjs`) mirrors a feature into one
 Inkdrop note over the local HTTP server, with an injected `fetch` (tests never hit the network).
 It writes only a managed `<!-- orc:begin -->`…`<!-- orc:end -->` block, refuses non-loopback hosts
 and never prints credentials. `orc wt merge` records each merge in `.scratch/<feature>/merged` and
 pushes a linked feature; a push failure is a stderr warning only. See
 [ADR-0011](docs/adr/0011-inkdrop-feature-note.md) and [the API survey](docs/research/inkdrop.md).
+
+## Lessons
+
+`<main checkout>/.orc/lessons.md` holds one lesson per line
+(`- [L007] +2 -0 project|orc · <feature> · <text>`), parsed by `scripts/lib/lessons.mjs`.
+`readLessons` (`hooks/session-start.mjs`) injects the 40 best-scored active ones at SessionStart
+and in `orc codex`; `orc context` warns over the cap or on malformed lines. The guard and the
+SubagentStop gate append denies and blocks to `.orc/signals.jsonl`. The `reflect` skill proposes
+deltas at Capture and applies only the rows the user approves; `orc inkdrop lessons` mirrors them
+into `orc-lesson` notes. `reflect promote` (`skills/reflect/references/promote.md`) is how an `orc`
+lesson becomes a rules/agents edit here: a new eval case that fails first, then passes, and no
+existing case or grader is edited. See [ADR-0013](docs/adr/0013-self-improvement-loop.md).
 
 ## Codex launcher
 
@@ -100,10 +112,12 @@ repo on branch `feat/x` and runs with the plugin and again without it (the basel
 | `inline-small` | one-line fix done inline: no Agent call, tests pass |
 | `delegate-multi` | two dependent files + tests: `orc:implementer` spawned, no dispatch, no commit |
 | `batch-small` | two independent but tiny features: no `dispatch`, exactly one `orc:implementer`, two conventional commits, no leftover worktrees |
+| `reflect-capture` | a finished feature with a gotcha in `log.md`: `reflect` invoked, `.orc/lessons.md` gets 1–3 well-formed lessons |
 | `parallel-dispatch` | two independent substantial modules (bench-large's cron and expr spec, copied by the fixture): `plan` + `dispatch`, 2+ implementers, two `orc wt merge` conventional commits, no leftover worktrees |
 
 It costs real model usage on your Claude account (a full suite, 12 runs with Opus as the
-orchestrator, took about 9 minutes and $3; `parallel-dispatch` alone is about $1.45) and needs a
+orchestrator, took about 9 minutes and $3 before `reflect-capture`, which adds about $0.25 per
+run; `parallel-dispatch` alone is about $1.45) and needs a
 logged-in `claude`, `wt` and git. Narrow it with
 `npm run eval -- --case <name> --runs 1 --ablation none`. Results go to `evals/results/`
 (gitignored).
