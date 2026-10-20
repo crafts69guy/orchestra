@@ -180,7 +180,7 @@ flowchart LR
   bin["bin/orc"] --> disp["scripts/orc.mjs<br/>dispatcher"]
   disp -->|"claude [--yolo]"| claude["claude<br/>ORC=1, --model opus"]
   disp -->|"codex [--yolo]"| ocx["scripts/orc-codex.mjs"] --> codex["codex"]
-  disp -->|"wt new · merge · list"| owt["scripts/orc-wt.mjs"] --> wt["worktrunk + git"]
+  disp -->|"wt new · merge · list · session"| owt["scripts/orc-wt.mjs"] --> wt["worktrunk + git"]
   disp -->|"ccc init [--force]"| occ["scripts/ccc.mjs"] --> ccc["ccc init · index"]
   disp -->|"doctor"| doc["scripts/doctor.mjs"]
   disp -->|"context"| ctx["scripts/context.mjs"]
@@ -194,7 +194,9 @@ flowchart LR
 | `orc claude [--yolo] [args]` | runs `claude` with `ORC=1`; adds `--model opus` unless `--model` is given; `--yolo` → `--dangerously-skip-permissions`; injects the `cocoindex-code` MCP server (`--mcp-config=`) when `ccc` is usable (§10) |
 | `orc codex [--yolo] [args]` | Codex launcher (§4); `--yolo` → `--dangerously-bypass-approvals-and-sandbox`; injects the `cocoindex-code` MCP server (`-c mcp_servers.…`) when `ccc` is usable |
 | `orc ccc init [--force]` | indexes the git root with `ccc` (refuses repos under 200 files without `--force`), ensures `max_file_size: 256KB`, runs `ccc index` ([ADR-0007](adr/0007-ccc-integration.md)) |
+| `orc claude\|codex --wt <branch> [--base <ref>]` | runs the session in the session worktree of `<branch>` (`orc wt session`, created from `--base` when the branch is new); prints `orc: session worktree <path> (<branch>)` to stderr first ([ADR-0012](adr/0012-session-worktrees.md)) |
 | `orc wt new\|merge\|remove\|list` | worktree helper for dispatch (§8) |
+| `orc wt session <branch> [--base <ref>] [--yes]` | creates or reuses a session worktree for one orchestrator session (§8) |
 | `orc pane start\|wait\|prompt\|close` | runs dispatch implementers as `claude`/`codex` sessions in herdr panes; inside herdr only ([ADR-0009](adr/0009-herdr-pane-workers.md)) |
 | `orc status [--json]` | per plan task: worktree, herdr agent state and report status; `--json` is the versioned contract for external clients ([ADR-0010](adr/0010-json-contract-for-external-clients.md)) |
 | `orc doctor [--json]` | checks node, git, `wt`, `ccc` (warning only), `herdr` (inside herdr only, warning only), a harness and the installed plugins; exit 1 if a required check fails; `--json` prints `{ schemaVersion, checks }` |
@@ -327,6 +329,7 @@ works on both harnesses.
 | `orc wt merge <F> <T> --message <msg> [--yes]` | commits with the orchestrator's message (squashing extra commits), pre-checks with `git merge-tree --write-tree`, then `wt merge <F> --no-commit`; prints `merged` with the commit, or `conflict` with files (exit 2, rebase aborted) |
 | `orc wt remove <F> <T> [--yes]` | abandons a task: `wt remove <F>--<T> --foreground -D -f`, even when dirty or unmerged; prints `removed` |
 | `orc wt list <F>` | prints `[{task, branch, path}]` for the worktrees whose branch is `<F>--<task>` |
+| `orc wt session <B> [--base <ref>] [--yes]` | `wt switch <B>` when the branch exists (`--base` ignored), else `wt switch -c <B> [--base <ref>]`, both `--no-cd --format=json`, with the user's worktrunk path template; prints `{branch, path, action}` |
 
 Design notes from P0:
 
@@ -336,6 +339,16 @@ Design notes from P0:
   `--yes` is passed only after the user confirms the repo is trusted.
 - worktrunk's fallback squash message is not conventional, so the orchestrator
   always writes the message.
+
+### Session worktrees
+
+Task worktrees isolate subagents; a session worktree isolates a whole orchestrator session, so two
+sessions never share a checkout ([ADR-0012](adr/0012-session-worktrees.md)). It lives where the
+user's worktrunk template puts it (by default a sibling `<repo>.<branch>`). `orc wt new` run from it
+still puts task worktrees under the main root's `.worktrees/`, and the context's `Scratch dir:` line
+keeps plans in the main root's `.scratch/`. The SessionStart hook (and `orc codex`) warns, never
+blocks: inside herdr when another agent's cwd is in this checkout, otherwise at startup when the tree
+already has uncommitted changes.
 
 ### Task state machine
 

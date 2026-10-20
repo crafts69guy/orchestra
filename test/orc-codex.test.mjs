@@ -203,3 +203,19 @@ test('run sets the inkdrop flag from credentials and the git config mapping', ()
   assert.match(on, /inkdrop inbox\|claim\|push\|pull`\)\nInkdrop notebook: Orchestra \(book:B\)\n/);
   assert.doesNotMatch(instructions({}), /\nb\b|Inkdrop/);
 });
+
+test('run adds the Scratch dir line and a startup collision warning to the context', () => {
+  const { deps, out } = harness({
+    cwd: '/repo.b',
+    exec: (_cmd, args) => {
+      if (args[0] === 'status') return { status: 0, stdout: ' M a\n' };
+      if (args.includes('--show-toplevel')) return { status: 0, stdout: '/repo.b\n' };
+      if (args.includes('--git-common-dir')) return { status: 0, stdout: '/repo/.git\n' };
+      return { status: 1, stdout: '' };
+    },
+  });
+  run(deps);
+  const context = JSON.parse(out.spawned.args[1].slice('developer_instructions='.length));
+  assert.match(context, /\nScratch dir: \/repo\/\.scratch /);
+  assert.match(context, /\n\norc: this checkout already has uncommitted changes \(1 paths\)/);
+});

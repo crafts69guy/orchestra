@@ -22,6 +22,7 @@ import {
   realDeps,
   remove,
   run,
+  session,
 } from '../scripts/orc-wt.mjs';
 
 const tmp = mkdtempSync(join(tmpdir(), 'orc-wt-'));
@@ -437,4 +438,37 @@ test('remove force-removes the task worktree and its unmerged branch', () => {
     result: { status: 'error', task: 'T1', stderr: 'no such branch' },
   });
   assert.equal(run(['remove', 'F'], deps, '/r').code, 1);
+});
+
+test('session creates a new branch from --base, or reuses an existing one ignoring --base', () => {
+  const created = '{"action":"created","branch":"b","path":"/r.b"}';
+  const fresh = fake({ 'git rev-parse': bad(''), wt: ok(created) });
+  assert.deepEqual(run(['session', 'b', '--base', 'main', '--yes'], fresh, '/r'), {
+    code: 0,
+    result: { branch: 'b', path: '/r.b', action: 'created' },
+  });
+  assert.deepEqual(lines(fresh), [
+    'git rev-parse --verify --quiet refs/heads/b',
+    'wt switch -c b --base main --no-cd --format=json --yes',
+  ]);
+  const old = fake({ wt: ok('{"action":"existing","path":"/r.b"}') });
+  assert.equal(session(old, '/r', 'b', 'main', false).result.action, 'existing');
+  assert.equal(lines(old)[1], 'wt switch b --no-cd --format=json');
+  const noBase = fake({ 'git rev-parse': bad(''), wt: ok(created) });
+  session(noBase, '/r', 'b', undefined, false);
+  assert.equal(lines(noBase)[1], 'wt switch -c b --no-cd --format=json');
+});
+
+test('session reports wt failure and output without a path', () => {
+  assert.deepEqual(session(fake({ wt: bad('nope') }), '/r', 'b', undefined, false), {
+    code: 1,
+    result: { status: 'error', task: null, stderr: 'nope' },
+  });
+  for (const out of ['garbage', '{"action":"created"}']) {
+    const { code, result } = session(fake({ wt: ok(out) }), '/r', 'b', undefined, false);
+    assert.equal(code, 1);
+    assert.match(result.stderr, /unparseable wt output/);
+  }
+  assert.match(run(['session'], fake({}), '/r').result.stderr, /orc wt session <branch>/);
+  assert.equal(run(['session', 'a', 'b'], fake({}), '/r').code, 1);
 });

@@ -16,12 +16,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   applyMarkers,
   buildContext,
+  collisionWarning,
   formatOutput,
   isEntry,
   main,
   pluginRoot,
   readRules,
   run,
+  scratchDir,
+  sourceOf,
   WT_WARNING,
   which,
 } from '../hooks/session-start.mjs';
@@ -154,13 +157,13 @@ function fakeProcess(env) {
 test('main wires real fs and process streams against a plugin root', () => {
   const root = fixtureRoot('main-ok', '# MAIN\n');
   const ok = fakeProcess({ ORC: '1', PATH: '' });
-  main(ok, pathToFileURL(join(root, 'hooks', 'session-start.mjs')).href);
+  main(ok, pathToFileURL(join(root, 'hooks', 'session-start.mjs')).href, () => '{}');
   assert.equal(ok.exitCode, 0);
   assert.match(ok.out, /# MAIN/);
   assert.match(ok.out, /worktrunk/);
 
   const bad = fakeProcess({ ORC: '1', PATH: '' });
-  main(bad, pathToFileURL(join(tmp, 'nowhere', 'hooks', 'session-start.mjs')).href);
+  main(bad, pathToFileURL(join(tmp, 'nowhere', 'hooks', 'session-start.mjs')).href, () => '');
   assert.equal(bad.exitCode, 0);
   assert.equal(bad.out, '');
   assert.match(bad.err, /not found/);
@@ -329,4 +332,113 @@ test('run turns inkdrop on with credentials and a mapped notebook, off with ORC_
     const off = ctx(env);
     assert.doesNotMatch(off, /\nb\b|orc inkdrop|Inkdrop notebook/);
   }
+});
+
+/** Fake exec: `tops` maps a cwd to its git toplevel; `herdrOut` is `herdr agent list` stdout. */
+function gitExec({ tops = { '/repo': '/repo' }, common = '/repo/.git', porcelain = '', herdrOut }) {
+  return (cmd, args, cwd) => {
+    const line = [cmd, ...args].join(' ');
+    if (cmd === 'herdr') {
+      return herdrOut === undefined
+        ? { status: 1, stdout: '', stderr: 'no server' }
+        : { status: 0, stdout: herdrOut };
+    }
+    if (line === 'git rev-parse --show-toplevel') {
+      return tops[cwd] ? { status: 0, stdout: `${tops[cwd]}\n` } : { status: 128, stdout: '' };
+    }
+    if (line.includes('--git-common-dir')) return { status: 0, stdout: `${common}\n` };
+    if (line === 'git status --porcelain') return { status: 0, stdout: porcelain };
+    return { status: 1, stdout: '' };
+  };
+}
+
+const agentList = (agents) => JSON.stringify({ result: { agents } });
+const HERDR = { HERDR_ENV: '1', HERDR_PANE_ID: 'p1' };
+
+test('collisionWarning names other herdr agents in this checkout, not task worktrees', () => {
+  const agents = [
+    { pane_id: 'p1', agent: 'claude', cwd: '/repo' }, // this pane
+    { pane_id: 'p2', agent: 'codex', foreground_cwd: '/repo/src', terminal_title_stripped: 'fix' },
+    { pane_id: 'p3', agent: 'claude', cwd: '/repo/.worktrees/F--T' }, // own toplevel
+    { pane_id: 'p4', agent: 'claude', cwd: '/repo2' }, // prefix only
+    { pane_id: 'p5', agent: 'claude', cwd: '/elsewhere' },
+    { pane_id: 'p6', agent: 'claude' }, // no cwd
+    { pane_id: 'p7', agent: 'claude', cwd: '/repo' },
+  ];
+  const exec = gitExec({
+    tops: {
+      '/repo': '/repo',
+      '/repo/src': '/repo',
+      '/repo/.worktrees/F--T': '/repo/.worktrees/F--T',
+    },
+    herdrOut: agentList(agents),
+    porcelain: ' M a\n',
+  });
+  const w = collisionWarning({ env: HERDR, cwd: '/repo', exec, source: 'startup' });
+  assert.match(
+    w,
+    /^orc: other agents are working in this checkout: p2 codex "fix", p7 claude ""\. /,
+  );
+  assert.match(w, /`orc wt session <branch>`.*EnterWorktree.*`orc codex --wt <branch>`/);
+});
+
+test('collisionWarning in herdr: alone, a herdr error or bad output is null (no dirty check)', () => {
+  for (const herdrOut of [
+    agentList([{ pane_id: 'p1', cwd: '/repo' }]),
+    undefined,
+    '{"result":{}}',
+  ]) {
+    const exec = gitExec({ herdrOut, porcelain: ' M a\n' });
+    assert.equal(collisionWarning({ env: HERDR, cwd: '/repo', exec, source: 'startup' }), null);
+  }
+});
+
+test('collisionWarning outside herdr warns about uncommitted changes at startup only', () => {
+  const exec = gitExec({ porcelain: ' M a\n?? b\n' });
+  const w = collisionWarning({ env: {}, cwd: '/repo', exec, source: 'startup' });
+  assert.match(w, /uncommitted changes \(2 paths\).*another session.*`orc wt session <branch>`/);
+  for (const source of ['resume', 'compact', undefined]) {
+    assert.equal(collisionWarning({ env: {}, cwd: '/repo', exec, source }), null);
+  }
+  const clean = gitExec({});
+  assert.equal(collisionWarning({ env: {}, cwd: '/repo', exec: clean, source: 'startup' }), null);
+  const noRepo = gitExec({ tops: {}, porcelain: ' M a\n' });
+  assert.equal(collisionWarning({ env: {}, cwd: '/x', exec: noRepo, source: 'startup' }), null);
+  const failing = (_cmd, args) =>
+    args[0] === 'status' ? { status: 128, stdout: '' } : { status: 0, stdout: '/repo\n' };
+  assert.equal(collisionWarning({ env: {}, cwd: '/repo', exec: failing, source: 'startup' }), null);
+});
+
+test('scratchDir is the main root .scratch only in a linked worktree', () => {
+  const wt = gitExec({ tops: { '/repo.b': '/repo.b' } });
+  assert.equal(scratchDir(wt, '/repo.b'), '/repo/.scratch');
+  assert.equal(scratchDir(gitExec({}), '/repo'), null);
+  assert.equal(scratchDir(gitExec({ tops: {} }), '/x'), null);
+  assert.equal(
+    scratchDir(() => ({ status: 1, stdout: '' }), '/x'),
+    null,
+  );
+});
+
+test('sourceOf reads the SessionStart source; bad or missing JSON is undefined', () => {
+  assert.equal(sourceOf('{"source":"startup"}'), 'startup');
+  for (const input of ['', 'nope', '{}', '{"source":1}', 'null']) {
+    assert.equal(sourceOf(input), undefined);
+  }
+});
+
+test('run adds the Scratch dir line and appends the warning as its own paragraph', () => {
+  const { deps, out } = harness({
+    root: fixtureRoot('collide', 'a\n'),
+    read: readFileSync,
+    cwd: '/repo.b',
+    exec: gitExec({ tops: { '/repo.b': '/repo.b' }, porcelain: ' M a\n' }),
+    input: '{"source":"startup"}',
+  });
+  run(deps);
+  const ctx = JSON.parse(out.stdout).hookSpecificOutput.additionalContext;
+  assert.match(
+    ctx,
+    /\nScratch dir: \/repo\/\.scratch \(plans and briefs go here, not in this worktree\)\n\norc: this checkout already has uncommitted changes \(1 paths\)[^\n]*\n$/,
+  );
 });

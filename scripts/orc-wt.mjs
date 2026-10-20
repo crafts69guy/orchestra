@@ -6,7 +6,7 @@ import { parseArgs } from 'node:util';
 export const WORKTREE_DIR = '.worktrees';
 const PATH_TEMPLATE = `worktree-path="${WORKTREE_DIR}/{{ branch | sanitize }}"`;
 const USAGE =
-  'usage: orc wt new <feature> <task>... [--yes] | orc wt merge <feature> <task> --message <msg> [--yes] | orc wt remove <feature> <task> [--yes] | orc wt list <feature>';
+  'usage: orc wt new <feature> <task>... [--yes] | orc wt merge <feature> <task> --message <msg> [--yes] | orc wt remove <feature> <task> [--yes] | orc wt list <feature> | orc wt session <branch> [--base <ref>] [--yes]';
 
 /** Real exec: never throws; a spawn failure (e.g. ENOENT) becomes status 127. */
 export function exec(cmd, args, cwd) {
@@ -174,6 +174,30 @@ export function remove(deps, cwd, feature, task, yes) {
   return { code: 0, result: { status: 'removed', task, branch } };
 }
 
+/**
+ * A session worktree for `branch`: reuses its worktree, or creates one (a new branch from `base`
+ * when the branch does not exist yet; `base` is ignored for an existing branch). The path comes
+ * from the user's worktrunk template, not `.worktrees/`. Returns `{ branch, path, action }`.
+ */
+export function session(deps, cwd, branch, base, yes) {
+  const exists = git(deps, cwd, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`);
+  const args =
+    exists.status === 0
+      ? ['switch', branch]
+      : ['switch', '-c', branch, ...(base ? ['--base', base] : [])];
+  args.push('--no-cd', '--format=json', ...(yes ? ['--yes'] : []));
+  const r = deps.exec('wt', args, cwd);
+  if (r.status !== 0) return fail(null, r.stderr);
+  let out;
+  try {
+    out = JSON.parse(r.stdout);
+  } catch {
+    out = null;
+  }
+  if (typeof out?.path !== 'string') return fail(null, `unparseable wt output: ${r.stdout}`);
+  return { code: 0, result: { branch, path: out.path, action: out.action } };
+}
+
 /** Returns `{ code, result }`; `result` is the JSON document to print. */
 export function run(argv, deps, cwd) {
   let parsed;
@@ -181,13 +205,13 @@ export function run(argv, deps, cwd) {
     parsed = parseArgs({
       args: argv,
       allowPositionals: true,
-      options: { yes: { type: 'boolean' }, message: { type: 'string' } },
+      options: { yes: { type: 'boolean' }, message: { type: 'string' }, base: { type: 'string' } },
     });
   } catch (e) {
     return fail(null, `${e.message}\n${USAGE}`);
   }
   const [cmd, feature, ...tasks] = parsed.positionals;
-  const { yes = false, message } = parsed.values;
+  const { yes = false, message, base } = parsed.values;
   if (cmd === 'new' && feature && tasks.length > 0) return create(deps, cwd, feature, tasks, yes);
   if (cmd === 'merge' && feature && tasks.length === 1 && message) {
     return merge(deps, cwd, feature, tasks[0], message, yes);
@@ -196,6 +220,9 @@ export function run(argv, deps, cwd) {
     return remove(deps, cwd, feature, tasks[0], yes);
   }
   if (cmd === 'list' && feature && tasks.length === 0) return list(deps, cwd, feature);
+  if (cmd === 'session' && feature && tasks.length === 0) {
+    return session(deps, cwd, feature, base, yes);
+  }
   return fail(null, USAGE);
 }
 

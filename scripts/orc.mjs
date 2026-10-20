@@ -17,15 +17,15 @@ import { run as doctor } from './doctor.mjs';
 import { run as inkdrop, push as inkdropPush } from './inkdrop.mjs';
 import { run as codex, gitCommonDir, spawnExit } from './orc-codex.mjs';
 import { run as pane } from './orc-pane.mjs';
-import { exec, run as wt, realDeps as wtDeps } from './orc-wt.mjs';
+import { exec, session, run as wt, realDeps as wtDeps } from './orc-wt.mjs';
 import { mainRoot, parseBase, recordMerge, run as status } from './status.mjs';
 
 export const USAGE = `usage: orc <command> [args]
 
 commands:
-  claude [--yolo] [--level high] [--panes] [args]   run claude with the orc workflow (ORC=1, --model opus by default)
-  codex [--yolo] [args]    run codex with the orc workflow
-  wt new|merge|remove|list ...   manage task worktrees (prints JSON)
+  claude [--yolo] [--level high] [--panes] [--wt <branch> [--base <ref>]] [args]   run claude with the orc workflow (ORC=1, --model opus by default)
+  codex [--yolo] [--wt <branch> [--base <ref>]] [args]   run codex with the orc workflow
+  wt new|merge|remove|list|session ...   manage task and session worktrees (prints JSON)
   pane start|wait|prompt|close ...   drive herdr pane workers (prints JSON; inside herdr only)
   ccc init [--force]       index this repo for semantic search (cocoindex-code)
   status [--json]          show plan tasks with their worktrees, pane agents and reports
@@ -40,6 +40,7 @@ commands:
 --yolo bypasses the harness's permission prompts and sandbox; never the default.
 --level high runs implementer on opus, scoper and shipper on sonnet (default: agent defaults).
 --panes runs dispatch's implementers as herdr pane workers (ORC_PANES=1; needs herdr).
+--wt runs the session in the worktree of <branch> (\`orc wt session\`), created from --base if new.
 `;
 
 /** Splits orc's own `--yolo` flag out of the args passed through to the harness. */
@@ -53,18 +54,49 @@ export function splitPanes(args) {
 }
 
 /**
- * Splits orc's `--level <v>` / `--level=<v>` out of the args. `level` is undefined when absent and
- * '' when the flag has no value; the last occurrence wins.
+ * Splits orc's `--<name> <v>` / `--<name>=<v>` out of the args. `value` is undefined when absent
+ * and '' when the flag has no value; the last occurrence wins.
  */
-export function splitLevel(args) {
-  let level;
+export function splitFlag(args, name) {
+  let value;
   const rest = [];
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--level') level = args[++i] ?? '';
-    else if (args[i].startsWith('--level=')) level = args[i].slice('--level='.length);
+    if (args[i] === `--${name}`) value = args[++i] ?? '';
+    else if (args[i].startsWith(`--${name}=`)) value = args[i].slice(name.length + 3);
     else rest.push(args[i]);
   }
-  return { level, rest };
+  return { value, rest };
+}
+
+/** Splits orc's `--level` out of the args (see `splitFlag`). */
+export function splitLevel(args) {
+  const { value, rest } = splitFlag(args, 'level');
+  return { level: value, rest };
+}
+
+/**
+ * Splits `--wt <branch>` and `--base <ref>` out of the args and, with `--wt`, creates or reuses that
+ * session worktree. Returns `{ cwd, rest }` to launch in, or `{ code }` after printing an error.
+ */
+export function sessionCwd(args, io) {
+  const { value: branch, rest: afterWt } = splitFlag(args, 'wt');
+  const { value: base, rest } = splitFlag(afterWt, 'base');
+  if (branch === undefined && base === undefined) return { cwd: io.cwd, rest };
+  const err =
+    (branch === undefined && '--base needs --wt <branch>') ||
+    (branch === '' && '--wt needs a branch') ||
+    (base === '' && '--base needs a ref');
+  if (err) {
+    io.stderr(`orc: ${err}\n`);
+    return { code: 1 };
+  }
+  const { code, result } = session(io.wtDeps, io.cwd, branch, base, false);
+  if (code !== 0) {
+    io.stderr(`orc: session worktree failed: ${JSON.stringify(result)}\n`);
+    return { code };
+  }
+  io.stderr(`orc: session worktree ${result.path} (${branch})\n`);
+  return { cwd: result.path, rest };
 }
 
 /** Args for `claude`; `ccc` puts the cocoindex-code `--mcp-config=` first. */
@@ -194,13 +226,16 @@ async function afterMerge(args, io, { task, commit }) {
 export const commands = {
   claude(args, io) {
     const { level, rest: afterLevel } = splitLevel(args);
-    const { panes, rest } = splitPanes(afterLevel);
+    const { panes, rest: afterPanes } = splitPanes(afterLevel);
     if (level !== undefined && level !== 'default' && level !== 'high') {
       io.stderr(`orc: unknown level ${level} (default|high)\n`);
       return 1;
     }
+    const { code, cwd, rest } = sessionCwd(afterPanes, io);
+    if (code !== undefined) return code;
     return spawnExit(
-      io.spawn('claude', claudeArgs(rest, cccEnabled(io.env, io.cwd, io)), {
+      io.spawn('claude', claudeArgs(rest, cccEnabled(io.env, cwd, io)), {
+        cwd,
         env: {
           ...io.env,
           ORC: '1',
@@ -215,11 +250,14 @@ export const commands = {
     );
   },
   codex(args, io) {
-    const { yolo, rest } = splitYolo(args);
+    const { yolo, rest: afterYolo } = splitYolo(args);
+    const { code, cwd, rest } = sessionCwd(afterYolo, io);
+    if (code !== undefined) return code;
     return codex({
       ...io,
+      cwd,
       argv: yolo ? ['--dangerously-bypass-approvals-and-sandbox', ...rest] : rest,
-      spawn: (a, env) => io.spawn('codex', a, { env }),
+      spawn: (a, env) => io.spawn('codex', a, { env, cwd }),
     });
   },
   ccc: (args, io) => ccc(args, { ...io, spawnExit }),

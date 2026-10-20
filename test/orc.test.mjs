@@ -20,6 +20,7 @@ import {
   main,
   realIo,
   run,
+  splitFlag,
   splitLevel,
   splitPanes,
   splitYolo,
@@ -140,6 +141,80 @@ test('claude --level sets ORC_LEVEL and stays out of argv; no flag leaves env al
   const plain = fakeIo();
   run(['claude'], plain);
   assert.equal('ORC_LEVEL' in plain.spawned[0].opts.env, false);
+});
+
+/** wtDeps whose `wt switch` succeeds (or `wtResult`); `git rev-parse` fails, so the branch is new. */
+function sessionDeps(wtResult = { status: 0, stdout: '{"action":"created","path":"/work.b"}' }) {
+  const calls = [];
+  return {
+    calls,
+    exec: (cmd, args, cwd) => {
+      calls.push([cmd, ...args, `@${cwd}`].join(' '));
+      return cmd === 'wt' ? { stderr: '', ...wtResult } : { status: 1, stdout: '', stderr: '' };
+    },
+  };
+}
+
+test('splitFlag strips a named flag in both forms', () => {
+  assert.deepEqual(splitFlag(['--wt=b', 'x', '--base', 'main'], 'wt'), {
+    value: 'b',
+    rest: ['x', '--base', 'main'],
+  });
+  assert.deepEqual(splitFlag(['--wt'], 'wt'), { value: '', rest: [] });
+});
+
+test('claude --wt runs in the session worktree, created from --base', () => {
+  const io = fakeIo({ wtDeps: sessionDeps() });
+  assert.equal(run(['claude', '--wt', 'b', '--base=main', 'hi'], io), 0);
+  assert.deepEqual(io.wtDeps.calls, [
+    'git rev-parse --verify --quiet refs/heads/b @/work',
+    'wt switch -c b --base main --no-cd --format=json @/work',
+  ]);
+  const [{ args, opts }] = io.spawned;
+  assert.deepEqual(args, ['--model', 'opus', 'hi']);
+  assert.equal(opts.cwd, '/work.b');
+  assert.equal(io.err, 'orc: session worktree /work.b (b)\n');
+  const plain = fakeIo();
+  run(['claude'], plain);
+  assert.equal(plain.spawned[0].opts.cwd, '/work');
+});
+
+test('--wt and --base errors exit without spawning', () => {
+  for (const [a, msg] of [
+    [['--base', 'main'], /--base needs --wt <branch>/],
+    [['--wt'], /--wt needs a branch/],
+    [['--wt=b', '--base'], /--base needs a ref/],
+  ]) {
+    const io = fakeIo();
+    assert.equal(run(['claude', ...a], io), 1);
+    assert.match(io.err, msg);
+    assert.equal(io.spawned.length, 0);
+  }
+  const io = fakeIo({ wtDeps: sessionDeps({ status: 1, stdout: '', stderr: 'wt broke' }) });
+  assert.equal(run(['codex', '--wt', 'b'], io), 1);
+  assert.match(io.err, /orc: session worktree failed: .*wt broke/);
+  assert.equal(io.spawned.length, 0);
+});
+
+test('codex --wt launches codex in the session worktree with that cwd', () => {
+  const cwds = [];
+  const io = fakeIo({
+    root: codexRoot(),
+    read: readFileSync,
+    readdir: () => [],
+    hasCommand: () => true,
+    exec: (_cmd, _args, cwd) => {
+      cwds.push(cwd);
+      return { status: 1, stdout: '' };
+    },
+    gitDir: (cwd) => `${cwd}/.git`,
+    wtDeps: sessionDeps(),
+  });
+  assert.equal(run(['codex', '--wt', 'b', 'exec'], io), 0);
+  const [{ args, opts }] = io.spawned;
+  assert.equal(opts.cwd, '/work.b');
+  assert.deepEqual(args.slice(-3), ['--add-dir', '/work.b/.git', 'exec']);
+  assert.ok(cwds.length > 0 && cwds.every((c) => c === '/work.b'));
 });
 
 test('claude --level rejects unknown or missing values without spawning', () => {
