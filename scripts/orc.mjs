@@ -29,7 +29,7 @@ commands:
   pane start|wait|prompt|close ...   drive herdr pane workers (prints JSON; inside herdr only)
   ccc init [--force]       index this repo for semantic search (cocoindex-code)
   status [--json]          show plan tasks with their worktrees, pane agents and reports
-  inkdrop init|inbox|claim|push|pull ...   mirror a feature into an Inkdrop note (local server)
+  inkdrop init|inbox|claim|push|pull|lessons ...   mirror a feature or the lessons into Inkdrop notes (local server)
   doctor [--json]          check prerequisites
   context [--scope ...] [--json]   audit what Claude/Codex load into context
   update                   update the npm CLI and the installed Claude/Codex plugins

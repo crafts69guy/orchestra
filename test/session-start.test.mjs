@@ -21,6 +21,7 @@ import {
   isEntry,
   main,
   pluginRoot,
+  readLessons,
   readRules,
   run,
   scratchDir,
@@ -308,7 +309,7 @@ test('buildContext names orc inkdrop and the notebook only when the inkdrop flag
   });
   assert.equal(
     on,
-    'a\nb\n\norc CLI: /p/bin/orc (use `/p/bin/orc wt new|merge|list` and `/p/bin/orc inkdrop inbox|claim|push|pull`)\nInkdrop notebook: Orchestra (book:B)\n',
+    'a\nb\n\norc CLI: /p/bin/orc (use `/p/bin/orc wt new|merge|list` and `/p/bin/orc inkdrop inbox|claim|push|pull|lessons`)\nInkdrop notebook: Orchestra (book:B)\n',
   );
   const off = buildContext(rules, true, '/p/bin/orc');
   assert.equal(off, 'a\n\norc CLI: /p/bin/orc (use `/p/bin/orc wt new|merge|list`)\n');
@@ -441,4 +442,67 @@ test('run adds the Scratch dir line and appends the warning as its own paragraph
     ctx,
     /\nScratch dir: \/repo\/\.scratch \(plans and briefs go here, not in this worktree\)\n\norc: this checkout already has uncommitted changes \(1 paths\)[^\n]*\n$/,
   );
+});
+
+const LESSON_A = '- [L001] +1 -0 project · f · first';
+const LESSON_B = '- [L002] +3 -0 orc · g · second';
+const LESSONS_MD = `# Lessons\n${LESSON_A}\n${LESSON_B}\n- [L003] +1 -1 project · f · retired\n- [bad\n`;
+const lessonsRead = (text) => (p) => {
+  if (p === '/repo/.orc/lessons.md') return text;
+  throw new Error(`ENOENT ${p}`);
+};
+
+test('readLessons reads the main root lessons file; null without repo, file or active lesson', () => {
+  const exec = gitExec({ tops: { '/repo.b': '/repo.b' } });
+  assert.deepEqual(
+    readLessons(exec, '/repo.b', lessonsRead(LESSONS_MD)).kept.map((l) => l.id),
+    ['L002', 'L001'],
+  );
+  assert.equal(readLessons(exec, '/repo.b', lessonsRead(LESSONS_MD)).hidden, 0);
+  assert.equal(
+    readLessons(() => ({ status: 128, stdout: '' }), '/x', lessonsRead(LESSONS_MD)),
+    null,
+  );
+  assert.equal(
+    readLessons(exec, '/repo', () => {
+      throw new Error('ENOENT');
+    }),
+    null,
+  );
+  assert.equal(readLessons(exec, '/repo', lessonsRead('- [L003] +0 -0 orc · f · retired\n')), null);
+  const dir = join(tmp, 'lessons-real');
+  mkdirSync(join(dir, '.orc'), { recursive: true });
+  writeFileSync(join(dir, '.orc', 'lessons.md'), `${LESSON_A}\n`);
+  const realExec = () => ({ status: 0, stdout: `${join(dir, '.git')}\n` });
+  assert.equal(readLessons(realExec, dir).kept[0].line, LESSON_A);
+});
+
+test('buildContext appends the lessons block after Scratch dir, with a hidden note', () => {
+  const kept = [{ line: LESSON_B }, { line: LESSON_A }];
+  const head =
+    'Lessons (approved, from past work in this repo; apply when relevant and pass relevant ones into briefs):\n';
+  const ctx = buildContext('# R\n', false, '/p', { scratch: '/s', lessons: { kept, hidden: 3 } });
+  assert.ok(
+    ctx.endsWith(
+      `Scratch dir: /s (plans and briefs go here, not in this worktree)\n${head}${LESSON_B}\n${LESSON_A}\norc: 3 more lessons not shown; run the reflect skill to consolidate .orc/lessons.md.\n\n${WT_WARNING}\n`,
+    ),
+  );
+  const noHidden = buildContext('# R\n', true, '/p', { lessons: { kept, hidden: 0 } });
+  assert.ok(noHidden.endsWith(`${head}${LESSON_B}\n${LESSON_A}\n`));
+  for (const lessons of [null, { kept: [], hidden: 2 }]) {
+    assert.doesNotMatch(buildContext('# R\n', true, '/p', { lessons }), /Lessons/);
+  }
+});
+
+test('run injects the lessons block from the main root', () => {
+  const rules = join(fixtureRoot('lessons', '# R\n'), 'rules', 'orchestrator.md');
+  const { deps, out } = harness({
+    root: join(tmp, 'lessons'),
+    cwd: '/repo',
+    exec: gitExec({}),
+    read: (p) => (p === rules ? '# R\n' : lessonsRead(LESSONS_MD)(p)),
+  });
+  run(deps);
+  const ctx = JSON.parse(out.stdout).hookSpecificOutput.additionalContext;
+  assert.ok(ctx.endsWith(`into briefs):\n${LESSON_B}\n${LESSON_A}\n`));
 });

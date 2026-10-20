@@ -200,7 +200,10 @@ test('run sets the inkdrop flag from credentials and the git config mapping', ()
   };
   const on = instructions({ INKDROP_LOCAL_USERNAME: 'u', INKDROP_LOCAL_PASSWORD: 'p' });
   assert.match(on, /\nb\n/);
-  assert.match(on, /inkdrop inbox\|claim\|push\|pull`\)\nInkdrop notebook: Orchestra \(book:B\)\n/);
+  assert.match(
+    on,
+    /inkdrop inbox\|claim\|push\|pull\|lessons`\)\nInkdrop notebook: Orchestra \(book:B\)\n/,
+  );
   assert.doesNotMatch(instructions({}), /\nb\b|Inkdrop/);
 });
 
@@ -218,4 +221,19 @@ test('run adds the Scratch dir line and a startup collision warning to the conte
   const context = JSON.parse(out.spawned.args[1].slice('developer_instructions='.length));
   assert.match(context, /\nScratch dir: \/repo\/\.scratch /);
   assert.match(context, /\n\norc: this checkout already has uncommitted changes \(1 paths\)/);
+});
+
+test('run injects the main root lessons like the SessionStart hook', () => {
+  const lesson = '- [L001] +1 -0 project · f · keep it small';
+  const { deps, out } = harness({
+    cwd: '/repo',
+    exec: (_cmd, args) =>
+      args.includes('--git-common-dir')
+        ? { status: 0, stdout: '/repo/.git\n' }
+        : { status: 1, stdout: '' },
+    read: (p, enc) => (p === '/repo/.orc/lessons.md' ? `${lesson}\n` : readFileSync(p, enc)),
+  });
+  run(deps);
+  const context = JSON.parse(out.spawned.args[1].slice('developer_instructions='.length));
+  assert.ok(context.includes(`into briefs):\n${lesson}\n`));
 });

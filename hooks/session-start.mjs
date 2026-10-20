@@ -4,6 +4,7 @@ import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cccEnabled } from '../scripts/ccc.mjs';
 import { inkdropFlag } from '../scripts/inkdrop.mjs';
+import { lessonsPath, parseLessons, selectLessons } from '../scripts/lib/lessons.mjs';
 import { herdr } from '../scripts/orc-pane.mjs';
 import { exec } from '../scripts/orc-wt.mjs';
 import { mainRoot } from '../scripts/status.mjs';
@@ -49,11 +50,16 @@ export function applyMarkers(rules, flags) {
     .join('\n');
 }
 
+const LESSONS_HEADER =
+  'Lessons (approved, from past work in this repo; apply when relevant and pass relevant ones into briefs):';
+
 /**
  * `orcPath` is the absolute `bin/orc`; plugin bin/ is not on PATH under Codex, so name it.
  * `flags.panes` adds `orc pane` to the CLI line (and keeps the `orc:panes` rule line).
  * `flags.inkdrop` (`{ name, id }` or false) adds `orc inkdrop` and an `Inkdrop notebook:` line.
  * `flags.scratch` (a path or null) adds a `Scratch dir:` line.
+ * `flags.lessons` (`{ kept, hidden }` from `readLessons`, or null) adds a `Lessons` block of the
+ * kept raw lines, plus a consolidation note when `hidden > 0`.
  */
 export function buildContext(
   rules,
@@ -62,14 +68,20 @@ export function buildContext(
   flags = { docs: true, ccc: false, high: false, panes: false, inkdrop: false },
 ) {
   const pane = flags.panes ? ` and \`${orcPath} pane start|wait|prompt|close\`` : '';
-  const ink = flags.inkdrop ? ` and \`${orcPath} inkdrop inbox|claim|push|pull\`` : '';
+  const ink = flags.inkdrop ? ` and \`${orcPath} inkdrop inbox|claim|push|pull|lessons\`` : '';
   const book = flags.inkdrop
     ? `Inkdrop notebook: ${flags.inkdrop.name} (${flags.inkdrop.id})\n`
     : '';
   const scratch = flags.scratch
     ? `Scratch dir: ${flags.scratch} (plans and briefs go here, not in this worktree)\n`
     : '';
-  const withCli = `${applyMarkers(rules, flags).trimEnd()}\n\norc CLI: ${orcPath} (use \`${orcPath} wt new|merge|list\`${pane}${ink})\n${book}${scratch}`;
+  const more = flags.lessons?.hidden
+    ? `orc: ${flags.lessons.hidden} more lessons not shown; run the reflect skill to consolidate .orc/lessons.md.\n`
+    : '';
+  const lessons = flags.lessons?.kept.length
+    ? `${LESSONS_HEADER}\n${flags.lessons.kept.map((l) => `${l.line}\n`).join('')}${more}`
+    : '';
+  const withCli = `${applyMarkers(rules, flags).trimEnd()}\n\norc CLI: ${orcPath} (use \`${orcPath} wt new|merge|list\`${pane}${ink})\n${book}${scratch}${lessons}`;
   return hasWt ? withCli : `${withCli}\n${WT_WARNING}\n`;
 }
 
@@ -83,6 +95,23 @@ export function scratchDir(exec, cwd) {
   const top = toplevel(exec, cwd);
   const root = mainRoot({ exec }, cwd);
   return top !== null && root !== null && root !== top ? join(root, '.scratch') : null;
+}
+
+/**
+ * `{ kept, hidden }` from `<main root>/.orc/lessons.md` (shared by every worktree), or null with
+ * no git root, a missing or unreadable file, or no active lesson.
+ */
+export function readLessons(exec, cwd, read = readFileSync) {
+  const root = mainRoot({ exec }, cwd);
+  if (root === null) return null;
+  let text;
+  try {
+    text = String(read(lessonsPath(root), 'utf8'));
+  } catch {
+    return null;
+  }
+  const selected = selectLessons(parseLessons(text).lessons);
+  return selected.kept.length > 0 ? selected : null;
 }
 
 const ISOLATE =
@@ -167,6 +196,7 @@ export function run({
     ccc: cccEnabled(env, cwd, { exec, exists, hasCommand }),
     inkdrop: inkdropFlag(env, cwd, { exec }),
     scratch: scratchDir(exec, cwd),
+    lessons: readLessons(exec, cwd, read),
   });
   const warning = collisionWarning({ env, cwd, exec, source: sourceOf(input) });
   stdout(formatOutput(withWarning(context, warning)));

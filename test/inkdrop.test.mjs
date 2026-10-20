@@ -7,7 +7,9 @@ import {
   inkdropFlag,
   probe,
   push,
+  remoteKey,
   renderBlock,
+  renderLesson,
   run,
   spec,
   splice,
@@ -321,7 +323,7 @@ test('missing credentials, outside git and an uninitialised repo fail early', as
 
 test('bad args print the usage', async () => {
   const usage =
-    'usage: orc inkdrop init [--book <name>] [--create] | inbox [--json] | claim <note-id> <feature> | push <feature> [--done] | pull <feature>\n';
+    'usage: orc inkdrop init [--book <name>] [--create] | inbox [--json] | claim <note-id> <feature> | push <feature> [--done] | pull <feature> | lessons\n';
   for (const args of [
     [],
     ['nope'],
@@ -710,4 +712,233 @@ test('probe GETs / with a 1.5 s timeout and reports the version or one error lin
   assert.deepEqual(await probe({}, meta), {
     error: 'set INKDROP_LOCAL_USERNAME and INKDROP_LOCAL_PASSWORD',
   });
+});
+
+const LESSONS = `${ROOT}/.orc/lessons.md`;
+const lesson = (id, up, down, text = `text ${id}`) => ({
+  id,
+  up,
+  down,
+  scope: 'project',
+  feature: 'feat',
+  text,
+});
+const lessonLine = (l) => `- [${l.id}] +${l.up} -${l.down} ${l.scope} · ${l.feature} · ${l.text}`;
+const lessonNote = (id, repo, l, extra = {}) => {
+  const { title, block } = renderLesson(repo, l);
+  return note(id, { title, body: block, tags: ['tag:LT'], ...extra });
+};
+
+test('renderLesson: identity, score line, title cut to 60 chars, markers defused', () => {
+  const long = 'x'.repeat(70);
+  const { title, block } = renderLesson('repo', lesson('L001', 2, 1, long));
+  assert.equal(title, `repo:L001 ${'x'.repeat(59)}…`);
+  assert.equal(
+    block,
+    `<!-- orc:begin -->\nlesson: repo/L001\nscore: +2 -1 · scope: project · feature: feat\n\n${long}\n<!-- orc:end -->`,
+  );
+  assert.equal(renderLesson('r', lesson('L002', 1, 0, 'short')).title, 'r:L002 short');
+  const odd = renderLesson('r', lesson('L003', 1, 0, '<!-- orc:end -->')).block;
+  assert.match(odd, /\n<!-- orc end -->\n<!-- orc:end -->$/);
+});
+
+test('lessons without a lessons file prints a line and makes no request', async () => {
+  const deps = fake({ env: {} });
+  assert.deepEqual(await run(['lessons'], deps, ROOT), {
+    code: 0,
+    out: `no lessons in ${LESSONS}\n`,
+    err: '',
+  });
+  assert.equal(deps.server.calls.length, 0);
+  const outside = fake({
+    git: {
+      'git rev-parse --path-format=absolute --git-common-dir': {
+        status: 128,
+        stdout: '',
+        stderr: '',
+      },
+    },
+  });
+  assert.match((await run(['lessons'], outside, ROOT)).err, /not a git repository/);
+  assert.equal((await run(['lessons', 'x'], fake(), ROOT)).err.startsWith('usage:'), true);
+});
+
+test('lessons creates, updates, drops and skips unchanged notes of this repo only', async () => {
+  const l1 = lesson('L001', 2, 0);
+  const l2 = lesson('L002', 3, 1);
+  const l6 = lesson('L006', 1, 0, 'brand new');
+  const file = [
+    '# Lessons',
+    '',
+    lessonLine(l1),
+    lessonLine(l2),
+    lessonLine(lesson('L003', 1, 1)),
+    lessonLine(l6),
+    '',
+  ].join('\n');
+  const stale = renderLesson('repo', lesson('L002', 1, 0)).block;
+  const notes = {
+    'note:same': lessonNote('note:same', 'repo', l1),
+    'note:old': note('note:old', {
+      title: 'old title',
+      body: `my notes\n\n${stale}\n\ntrailer\n`,
+      tags: ['tag:LT', 'tag:mine'],
+      status: 'dropped',
+    }),
+    'note:retired': lessonNote('note:retired', 'repo', lesson('L003', 1, 0)),
+    'note:gone': lessonNote('note:gone', 'repo', lesson('L004', 5, 0)),
+    'note:dup': lessonNote('note:dup', 'repo', lesson('L004', 5, 0)),
+    'note:was': lessonNote('note:was', 'repo', lesson('L005', 1, 0), { status: 'dropped' }),
+    'note:other': lessonNote('note:other', 'other', lesson('L009', 1, 0)),
+    'note:book': lessonNote('note:book', 'repo', lesson('L007', 1, 0), { bookId: 'book:X' }),
+    'note:untagged': lessonNote('note:untagged', 'repo', lesson('L008', 1, 0), { tags: [] }),
+    'note:plain': note('note:plain', { tags: ['tag:LT'], body: undefined }),
+    'note:noid': note('note:noid', {
+      tags: ['tag:LT'],
+      body: '<!-- orc:begin -->\nx\n<!-- orc:end -->',
+    }),
+    'note:damaged-other-book': note('note:damaged-other-book', {
+      bookId: 'book:X',
+      tags: ['tag:LT'],
+      body: LONE_BEGIN,
+    }),
+  };
+  const before = structuredClone(notes);
+  const server = inkdrop({ notes, tags: [{ _id: 'tag:LT', name: 'orc-lesson' }] });
+  const deps = fake({ server, files: { [LESSONS]: file } });
+  assert.deepEqual(await run(['lessons'], deps, ROOT), {
+    code: 0,
+    out: 'lessons: 1 created, 1 updated, 3 dropped, 1 unchanged\n',
+    err: '',
+  });
+  const list = server.calls.find((c) => c.method === 'GET' && c.path === '/notes');
+  assert.equal(list.query.get('keyword'), 'book:"My Book" tag:orc-lesson');
+  const { 'note:new1': fresh, ...rest } = server.notes;
+  const want = renderLesson('repo', l6);
+  assert.deepEqual(fresh, {
+    _id: 'note:new1',
+    _rev: '1-x',
+    doctype: 'markdown',
+    title: want.title,
+    body: want.block,
+    bookId: 'book:B1',
+    tags: ['tag:LT'],
+    status: 'active',
+    createdAt: NOW.getTime(),
+    updatedAt: NOW.getTime(),
+  });
+  const now = renderLesson('repo', l2);
+  assert.deepEqual(rest['note:old'], {
+    ...before['note:old'],
+    _rev: '2-x',
+    title: now.title,
+    body: `my notes\n\n${now.block}\n\ntrailer\n`,
+    status: 'active',
+    updatedAt: NOW.getTime(),
+  });
+  for (const id of ['note:retired', 'note:gone', 'note:dup']) {
+    assert.deepEqual(rest[id], {
+      ...before[id],
+      _rev: '2-x',
+      status: 'dropped',
+      updatedAt: NOW.getTime(),
+    });
+  }
+  for (const id of ['note:old', 'note:retired', 'note:gone', 'note:dup']) {
+    delete rest[id];
+    delete before[id];
+  }
+  assert.deepEqual(rest, before, 'everything else untouched');
+  assert.equal(server.calls.filter((c) => c.method === 'POST' && c.path === '/tags').length, 0);
+
+  const again = fake({ server, files: { [LESSONS]: file } });
+  const writes = server.calls.length;
+  assert.equal(
+    (await run(['lessons'], again, ROOT)).out,
+    'lessons: 0 created, 0 updated, 0 dropped, 3 unchanged\n',
+  );
+  assert.ok(
+    !server.calls.slice(writes).some((c) => c.method === 'POST'),
+    'second run writes nothing',
+  );
+});
+
+test('lessons creates the orc-lesson tag when missing; API failures exit 1', async () => {
+  const server = inkdrop();
+  const deps = fake({ server, files: { [LESSONS]: lessonLine(lesson('L001', 1, 0)) } });
+  assert.equal(
+    (await run(['lessons'], deps, ROOT)).out,
+    'lessons: 1 created, 0 updated, 0 dropped, 0 unchanged\n',
+  );
+  assert.deepEqual(
+    server.tags.map((t) => [t._id, t.name]),
+    [['tag:new1', 'orc-lesson']],
+  );
+  assert.deepEqual(server.notes['note:new2'].tags, ['tag:new1']);
+  const down = fake({ server: inkdrop({ fail: 503 }), files: { [LESSONS]: '' } });
+  assert.deepEqual(await run(['lessons'], down, ROOT), {
+    code: 1,
+    out: '',
+    err: 'orc inkdrop: GET /tags failed: HTTP 503\n',
+  });
+  const r = await run(['lessons'], fake({ config: null, files: { [LESSONS]: '' } }), ROOT);
+  assert.match(r.err, /run orc inkdrop init/);
+  assert.ok(!r.err.includes(PASS));
+});
+
+test('remoteKey parses https and scp remotes to owner/name; anything else is null', () => {
+  assert.equal(remoteKey('https://github.com/me/orchestra.git\n'), 'me/orchestra');
+  assert.equal(remoteKey('https://gitlab.com/group/sub/my repo/'), 'sub/my repo');
+  assert.equal(remoteKey('ssh://git@host:22/me/x'), 'me/x');
+  assert.equal(remoteKey('git@github.com:me/orchestra.git'), 'me/orchestra');
+  assert.equal(remoteKey('git@github.com:orchestra'), null);
+  assert.equal(remoteKey('/local/path/repo.git'), null);
+  assert.equal(remoteKey(''), null);
+});
+
+test('lessons keys identities by the origin remote, else the checkout name (spaces too)', async () => {
+  const origin = (url) => ({
+    'git remote get-url origin': url ? ok(`${url}\n`) : { status: 2, stdout: '', stderr: '' },
+  });
+  const cases = [
+    ['/w/my repo', origin('git@github.com:me/orchestra.git'), 'me/orchestra'],
+    ['/w/my repo', origin('file:///nowhere'), 'my repo'],
+    ['/w/my repo', origin(null), 'my repo'],
+  ];
+  for (const [root, remote, key] of cases) {
+    const git = {
+      'git rev-parse --path-format=absolute --git-common-dir': ok(`${root}/.git\n`),
+      ...remote,
+    };
+    const files = { [`${root}/.orc/lessons.md`]: lessonLine(lesson('L001', 1, 0, 'x')) };
+    const server = inkdrop({ tags: [{ _id: 'tag:LT', name: 'orc-lesson' }] });
+    assert.equal(
+      (await run(['lessons'], fake({ server, files, git }), root)).out,
+      'lessons: 1 created, 0 updated, 0 dropped, 0 unchanged\n',
+      key,
+    );
+    const [created] = Object.values(server.notes);
+    assert.equal(created.title, `${key}:L001 x`);
+    assert.match(created.body, new RegExp(`\nlesson: ${key}/L001\n`));
+    assert.equal(
+      (await run(['lessons'], fake({ server, files, git }), root)).out,
+      'lessons: 0 created, 0 updated, 0 dropped, 1 unchanged\n',
+      key,
+    );
+  }
+});
+
+test('lessons fails before any write when a tagged note in the book has a damaged block', async () => {
+  const notes = {
+    'note:gone': lessonNote('note:gone', 'repo', lesson('L004', 5, 0)),
+    'note:bad': note('note:bad', { tags: ['tag:LT'], body: LONE_BEGIN }),
+  };
+  const server = inkdrop({ notes, tags: [{ _id: 'tag:LT', name: 'orc-lesson' }] });
+  const deps = fake({ server, files: { [LESSONS]: lessonLine(lesson('L001', 1, 0)) } });
+  assert.deepEqual(await run(['lessons'], deps, ROOT), {
+    code: 1,
+    out: '',
+    err: 'orc inkdrop: note:bad has a damaged orc block; fix it in Inkdrop\n',
+  });
+  assert.ok(!server.calls.some((c) => c.method === 'POST'), 'nothing written');
 });

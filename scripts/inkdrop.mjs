@@ -1,13 +1,18 @@
 import { createHash } from 'node:crypto';
 import { basename, join } from 'node:path';
+import { lessonsPath, parseLessons, selectLessons } from './lib/lessons.mjs';
 import { collect, mainRoot, parseBase } from './status.mjs';
 
 const USAGE =
-  'usage: orc inkdrop init [--book <name>] [--create] | inbox [--json] | claim <note-id> <feature> | push <feature> [--done] | pull <feature>\n';
+  'usage: orc inkdrop init [--book <name>] [--create] | inbox [--json] | claim <note-id> <feature> | push <feature> [--done] | pull <feature> | lessons\n';
 const DEFAULT_URL = 'http://localhost:19840';
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']); // URL.hostname keeps IPv6 brackets
 const TIMEOUT_MS = 5000;
 const TAG = 'orc';
+const LESSON_TAG = 'orc-lesson';
+const LESSON_ID = /^lesson: (.+)$/m;
+const REMOTE = /^(?:[a-z][\w+.-]*:\/\/[^/]+\/|[^@/\s]+@[^:/\s]+:)(.+?)(?:\.git)?\/?$/;
+const TITLE_MAX = 60;
 const BEGIN = '<!-- orc:begin -->';
 const END = '<!-- orc:end -->';
 // A marker is a whole line (CRLF-tolerant); a CR before its newline stays outside the block.
@@ -344,6 +349,15 @@ export function push(deps, cwd, feature, { done = false } = {}) {
   return attempt(() => pushFeature(deps, cwd, feature, done));
 }
 
+/** The tag named `name` from `GET /tags`, created when missing. */
+async function ensureTag(ctx, name, time) {
+  const tags = await ctx.call('GET', '/tags', { query: { limit: '1000' } });
+  const tag = tags.find((t) => t.name === name);
+  if (tag) return tag;
+  const doc = { name, color: 'default', createdAt: time, updatedAt: time };
+  return { ...doc, _id: await create(ctx, 'tag', doc) };
+}
+
 async function init(deps, cwd, flags) {
   const ctx = setup(deps, cwd, false);
   const name = flags.book ?? basename(ctx.root);
@@ -357,12 +371,7 @@ async function init(deps, cwd, flags) {
     book = { name, parentBookId: null, createdAt: time, updatedAt: time };
     book._id = await create(ctx, 'book', book);
   }
-  const tags = await ctx.call('GET', '/tags', { query: { limit: '1000' } });
-  let tag = tags.find((t) => t.name === TAG);
-  if (!tag) {
-    tag = { name: TAG, color: 'default', createdAt: time, updatedAt: time };
-    tag._id = await create(ctx, 'tag', tag);
-  }
+  const tag = await ensureTag(ctx, TAG, time);
   const settings = [
     ['orc.inkdropBook', book._id],
     ['orc.inkdropBookName', book.name],
@@ -456,6 +465,112 @@ async function pull(deps, cwd, feature) {
   return `changed: yes\n\n${current}\n`;
 }
 
+/**
+ * A lesson note's title and managed block: `<repo>:<id> <text cut to 60 chars>`, and the identity
+ * line `lesson: <repo>/<id>` (`repo` is the origin's `<owner>/<name>` or the checkout's basename), score, scope, feature and text. Marker lines in the text are defused.
+ */
+export function renderLesson(repo, lesson) {
+  const { id, up, down, scope, feature, text } = lesson;
+  const cut = text.length > TITLE_MAX ? `${text.slice(0, TITLE_MAX - 1)}…` : text;
+  const body = [
+    `lesson: ${repo}/${id}`,
+    `score: +${up} -${down} · scope: ${scope} · feature: ${feature}`,
+    '',
+    text,
+  ]
+    .join('\n')
+    .replace(/^<!-- orc:(begin|end) -->/gm, '<!-- orc $1 -->');
+  return { title: `${repo}:${id} ${cut}`, block: `${BEGIN}\n${body}\n${END}` };
+}
+
+/**
+ * `<owner>/<name>` from a git remote URL, https (`https://host/owner/name(.git)`) or scp
+ * (`git@host:owner/name(.git)`) style; the last two path segments, `.git` stripped. Null otherwise.
+ */
+export function remoteKey(url) {
+  const parts = url.trim().match(REMOTE)?.[1].split('/') ?? [];
+  return parts.length >= 2 && parts.every(Boolean) ? parts.slice(-2).join('/') : null;
+}
+
+/** The repo key for lesson identities: `remoteKey` of origin, else the main checkout's basename. */
+function repoKey(deps, root) {
+  const r = deps.exec('git', ['remote', 'get-url', 'origin'], root);
+  return (r.status === 0 && remoteKey(r.stdout)) || basename(root);
+}
+
+/** The `<key>/<id>` identity in a note's managed block, or null (no block or no line). */
+function lessonIdentity(id, body) {
+  intact(id, body);
+  const at = locate(body);
+  return at ? (body.slice(at.start, at.end).match(LESSON_ID)?.[1] ?? null) : null;
+}
+
+async function lessons(deps, cwd) {
+  const root = mainRoot(deps, cwd);
+  const path = root && lessonsPath(root);
+  const text = path && readOptional(deps, path);
+  if (path && text === null) return `no lessons in ${path}\n`;
+  const ctx = setup(deps, cwd);
+  const repo = repoKey(deps, ctx.root);
+  const active = new Map(
+    selectLessons(parseLessons(text).lessons, Number.POSITIVE_INFINITY).kept.map((l) => [
+      `${repo}/${l.id}`,
+      renderLesson(repo, l),
+    ]),
+  );
+  const time = deps.now().getTime();
+  const tag = await ensureTag(ctx, LESSON_TAG, time);
+  // ponytail: one page of 1000; add skip paging if a notebook ever holds more lesson notes.
+  const keyword = `book:"${ctx.config.bookName}" tag:${LESSON_TAG}`;
+  const found = await ctx.call('GET', '/notes', { query: { keyword, limit: '1000' } });
+  // Identify every tagged note first, so a damaged block fails the run before any write.
+  const mine = found
+    .filter((n) => n.bookId === ctx.config.book && n.tags?.includes(tag._id))
+    .map((n) => ({ n, identity: lessonIdentity(n._id, n.body ?? '') }))
+    .filter(({ identity }) => identity?.startsWith(`${repo}/`));
+  const counts = { created: 0, updated: 0, dropped: 0, unchanged: 0 };
+  const seen = new Set();
+  for (const { n, identity } of mine) {
+    seen.add(identity);
+    const want = active.get(identity);
+    if (!want) {
+      if (n.status === 'dropped') continue;
+      await save(ctx, deps, n._id, (note) => ({ ...note, status: 'dropped' }));
+      counts.dropped++;
+      continue;
+    }
+    const doc = (note) => ({
+      ...note,
+      title: want.title,
+      body: splice(note.body ?? '', want.block),
+      status: 'active',
+    });
+    const next = doc(n);
+    if (next.title === n.title && next.body === n.body && n.status === 'active') {
+      counts.unchanged++;
+      continue;
+    }
+    await save(ctx, deps, n._id, doc);
+    counts.updated++;
+  }
+  for (const [identity, want] of active) {
+    if (seen.has(identity)) continue;
+    await create(ctx, 'note', {
+      doctype: 'markdown',
+      title: want.title,
+      body: want.block,
+      bookId: ctx.config.book,
+      tags: [tag._id],
+      status: 'active',
+      createdAt: time,
+      updatedAt: time,
+    });
+    counts.created++;
+  }
+  const { created, updated, dropped, unchanged } = counts;
+  return `lessons: ${created} created, ${updated} updated, ${dropped} dropped, ${unchanged} unchanged\n`;
+}
+
 /** `init` flags, or null on anything unexpected. */
 function initFlags(rest) {
   const flags = { book: undefined, create: false };
@@ -483,12 +598,14 @@ function parse(deps, cwd, [sub, ...rest]) {
     return () => pushFeature(deps, cwd, positional[0], rest.length === 2);
   }
   if (sub === 'pull' && rest.length === 1) return () => pull(deps, cwd, rest[0]);
+  if (sub === 'lessons' && rest.length === 0) return () => lessons(deps, cwd);
   return null;
 }
 
 /**
- * `orc inkdrop init|inbox|claim|push|pull`. Resolves to `{ code, out, err }`; failures are one
- * stderr line, never a throw. `deps`: `exec` (never throws), `readFile` (utf8), `writeFile`,
+ * `orc inkdrop init|inbox|claim|push|pull|lessons`. `lessons` mirrors the active lessons of
+ * `<mainRoot>/.orc/lessons.md` into one `orc-lesson` note each and drops this repo's removed ones.
+ * Resolves to `{ code, out, err }`; failures are one stderr line, never a throw. `deps`: `exec` (never throws), `readFile` (utf8), `writeFile`,
  * `readdir`, `mkdir` (recursive), `env`, `hasCommand`, `fetch`, `now` (a Date).
  */
 export async function run(args, deps, cwd) {

@@ -1,0 +1,46 @@
+schema_version: "1.1"
+name: reflect-capture
+description: >-
+  A finished feature whose log.md has two real gotchas and one one-off. At Capture the
+  orchestrator should run the reflect skill, upvote the existing lesson the log repeats, add at
+  most 3 well-formed lessons and skip the flaky registry timeout.
+tags: [orc]
+plugins: ["../../.eval-plugin"]
+runs: 2
+context:
+  scaffold_script: fixture.sh
+execution:
+  model: opus # the production orchestrator model
+  max_turns: 15
+  timeout_seconds: 300
+  allowed_tools: [Read, Glob, Grep, Bash, Edit, Write, Agent, Skill]
+  prompt: |
+    The `slug` feature is done and reviewed; `.scratch/slug/log.md` is already written. Finish
+    the Capture step for it. I approve every lesson change you propose: apply them without
+    asking me. Don't commit and don't touch src/ or test/.
+graders:
+  - name: reflect-invoked
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:orc:)?reflect"'
+  - name: existing-lesson-upvoted
+    type: regex
+    target: { source: file, path: .orc/lessons.md }
+    flags: m
+    pattern: '^- \[L001\] \+2 -0 orc · csv · '
+  - name: new-lesson-well-formed
+    type: regex
+    target: { source: file, path: .orc/lessons.md }
+    flags: m
+    pattern: '^- \[L00[2-9]\] \+\d+ -\d+ (?:project|orc) · [^·]+ · .{20,}$'
+  - name: at-most-three-added
+    type: regex
+    target: { source: file, path: .orc/lessons.md }
+    pattern: '\[L00[5-9]\]'
+    match: not_contains
+  - name: one-off-skipped
+    type: regex
+    target: { source: file, path: .orc/lessons.md }
+    flags: i
+    pattern: 'registry|timed? ?out'
+    match: not_contains

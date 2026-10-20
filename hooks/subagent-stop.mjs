@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
-import { readStdin, roleOf } from './guard.mjs';
+import { readStdin, recordSignal, roleOf, signalDeps } from './guard.mjs';
 import { isEntry } from './session-start.mjs';
 
 /** Matches a report's `Status: done|partial|blocked` line; group 1 is the status. */
@@ -43,8 +43,11 @@ export function handbackReport(path, readFile = (p) => readFileSync(p, 'utf8')) 
   return report;
 }
 
-/** Returns the exit code; never throws, bad stdin JSON is a silent allow. */
-export function run({ env, input, stdout, readFile }) {
+/**
+ * Returns the exit code; never throws, bad stdin JSON is a silent allow. A block is recorded as a
+ * `no-evidence` signal through `signals` (`recordSignal` deps).
+ */
+export function run({ env, input, stdout, readFile, signals }) {
   if (env.ORC !== '1') return 0;
   let payload;
   try {
@@ -58,6 +61,7 @@ export function run({ env, input, stdout, readFile }) {
     !hasEvidence(handbackReport(payload?.agent_transcript_path, readFile))
   ) {
     stdout(JSON.stringify({ decision: 'block', reason: BLOCK_REASON }));
+    recordSignal(signals, 'no-evidence', 'implementer', 'missing Status/Validation');
   }
   return 0;
 }
@@ -67,6 +71,7 @@ export function main(proc = process, read = readStdin) {
     env: proc.env,
     input: proc.env.ORC === '1' ? read() : '',
     stdout: (s) => proc.stdout.write(s),
+    signals: { ...signalDeps, cwd: proc.cwd() },
   });
 }
 

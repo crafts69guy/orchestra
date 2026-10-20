@@ -58,7 +58,7 @@ codex plugin add orc@orchestra
 |---|---|
 | `orc doctor [--json]` | checks Node, git, `wt`, the harness CLIs and the installed plugins |
 | `orc status [--json]` | one line per plan task (`.scratch/<feature>/plan.md`) with its worktree, pane agent state and report status |
-| `orc inkdrop init\|inbox\|claim\|push\|pull ...` | mirrors a feature into an Inkdrop note (Inkdrop, below) |
+| `orc inkdrop init\|inbox\|claim\|push\|pull\|lessons ...` | mirrors a feature into an Inkdrop note, and lessons into notes of their own (Inkdrop, below) |
 | `orc context [--scope user\|project\|all] [--json]` | audits what Claude Code and Codex load into context (memory, skills, agents, plugins, MCP): token estimates and findings |
 | `orc claude [--yolo] [--level high] [--panes] [--wt <branch> [--base <ref>]] [args...]` | starts `claude` with `ORC=1` and `--model opus` (unless you pass `--model`) |
 | `orc codex [--yolo] [--wt <branch> [--base <ref>]] [args...]` | starts `codex` with `ORC=1` and the orchestration context (below) |
@@ -106,6 +106,13 @@ checkout that another herdr agent is working in, or (outside herdr) that already
 changes, the context warns it not to touch them and to isolate itself. See
 [ADR-0012](docs/adr/0012-session-worktrees.md).
 
+orc learns per repo. When a feature is done, the `reflect` skill proposes changes to the main
+checkout's `.orc/lessons.md` (git-excluded), such as a new lesson or a vote on an old one, and
+applies only the rows you approve. Every later session, on Claude Code and Codex, gets the 40
+best-scored lessons after the rules. Lessons about orc itself can be promoted into its rules, but
+only behind a new eval case that fails first. See
+[ADR-0013](docs/adr/0013-self-improvement-loop.md).
+
 ## Inkdrop
 
 Optional: share each feature with [Inkdrop](https://www.inkdrop.app) as one note. Turn on the
@@ -126,7 +133,7 @@ case-insensitively; `--create` makes it) and create the `orc` tag:
 orc inkdrop init [--book <name>] [--create]
 ```
 
-Four flows, each driven by the orchestrator once the session context names the notebook:
+Five flows, each driven by the orchestrator once the session context names the notebook:
 
 - **Inbox:** write a note tagged `orc` with status `active`; `orc inkdrop inbox` lists it and
   `orc inkdrop claim <note-id> <feature>` turns it into the request.
@@ -137,6 +144,9 @@ Four flows, each driven by the orchestrator once the session context names the n
   note completed.
 - **Recall:** with the Inkdrop MCP server connected, the orchestrator and `scoper` search the
   notebook before scoping.
+- **Lessons:** `orc inkdrop lessons` writes each active lesson in `.orc/lessons.md` to its own
+  note tagged `orc-lesson` and marks removed ones `dropped`, so recall finds them from other
+  repos.
 
 orc only rewrites its own block and never deletes. A note whose markers are damaged (an
 unterminated begin, two blocks) is refused, never guessed at: fix it in Inkdrop. `orc doctor`
