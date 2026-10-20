@@ -5,8 +5,9 @@ description: "orc workflow: write .scratch/<feature>/plan.md, a task list with f
 
 # Plan
 
-Write `.scratch/<feature>/plan.md` in the repo root. Keep `.scratch/` out of git
-(`.git/info/exclude`) unless the repo already tracks it.
+Write `.scratch/<feature>/plan.md` in the main checkout's `.scratch/` (the `Scratch dir:`
+line when the context has one, else the repo root), even from a session worktree. Keep
+`.scratch/` out of git (`.git/info/exclude`) unless the repo already tracks it.
 
 ## Before writing
 

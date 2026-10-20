@@ -63,6 +63,12 @@ worktree and branch, even unmerged). `orc pane start <feature> <task> --path <wt
 and `orc pane wait|prompt|close <task> --path <wt>` drive pane workers; every pane subcommand
 needs `--path`, because the herdr agent name hashes the worktree path.
 
+`orc wt session <branch> [--base <ref>]` creates or reuses a session worktree (path from the
+user's worktrunk template); `orc claude|codex --wt <branch> [--base <ref>]` launches the harness in
+it. The SessionStart hook and `orc codex` add a collision warning (`collisionWarning`: other herdr
+agents in this checkout, else uncommitted changes at startup) and a `Scratch dir:` line in a linked
+worktree. See [ADR-0012](docs/adr/0012-session-worktrees.md).
+
 `orc status --json`, `orc doctor --json` and `orc context --json` are a public contract for
 external clients (the Raycast extension): additive fields keep `schemaVersion: 1`, renames and
 removals bump it. See [ADR-0010](docs/adr/0010-json-contract-for-external-clients.md).

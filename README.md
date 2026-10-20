@@ -60,11 +60,12 @@ codex plugin add orc@orchestra
 | `orc status [--json]` | one line per plan task (`.scratch/<feature>/plan.md`) with its worktree, pane agent state and report status |
 | `orc inkdrop init\|inbox\|claim\|push\|pull ...` | mirrors a feature into an Inkdrop note (Inkdrop, below) |
 | `orc context [--scope user\|project\|all] [--json]` | audits what Claude Code and Codex load into context (memory, skills, agents, plugins, MCP): token estimates and findings |
-| `orc claude [--yolo] [--level high] [--panes] [args...]` | starts `claude` with `ORC=1` and `--model opus` (unless you pass `--model`) |
-| `orc codex [--yolo] [args...]` | starts `codex` with `ORC=1` and the orchestration context (below) |
+| `orc claude [--yolo] [--level high] [--panes] [--wt <branch> [--base <ref>]] [args...]` | starts `claude` with `ORC=1` and `--model opus` (unless you pass `--model`) |
+| `orc codex [--yolo] [--wt <branch> [--base <ref>]] [args...]` | starts `codex` with `ORC=1` and the orchestration context (below) |
 | `orc update` | updates the npm CLI, then the plugin for each harness that has the `orchestra` marketplace (`claude plugin update orc@orchestra`, `codex plugin marketplace upgrade orchestra`); skips npm from a git checkout |
 | `orc ccc init [--force]` | indexes this repo with `ccc` for semantic search (repos under 200 files need `--force`) |
 | `orc wt new\|merge\|remove\|list ...` | worktree helper used by the `dispatch` skill (`remove` abandons a task: worktree and branch); prints JSON |
+| `orc wt session <branch> [--base <ref>] [--yes]` | creates or reuses a session worktree for `<branch>` (`--base` applies only to a new branch); prints `{branch, path, action}` |
 | `orc pane start <F> <T> --path <wt> --brief <file>`, `wait\|prompt\|close <T> --path <wt> ...` | herdr pane workers for the `dispatch` skill (pane mode, below); prints JSON |
 | `orc eval [args...]` | behaviour evals; only from a git checkout (see [AGENTS.md](AGENTS.md)) |
 | `orc --help`, `orc --version` | usage and version |
@@ -96,6 +97,14 @@ so is the orchestrator's own model. `--level default` (or no flag) keeps the age
 `codex` session in a herdr pane of an `orc:<feature>` tab, inside its worktree, so you can watch
 and step into each one. Workers write their report to `<worktree>/.orc/report.md` (git-excluded).
 Outside herdr the flag has no effect. See [ADR-0009](docs/adr/0009-herdr-pane-workers.md).
+
+Run one orchestrator session per checkout. `orc claude --wt <branch>` (or `orc codex --wt
+<branch>`) starts the session in its own session worktree, created by `orc wt session` from
+`--base` when the branch is new, at the path your worktrunk template gives (by default a sibling
+`<repo>.<branch>`). Plans stay in the main checkout's `.scratch/`. When a session starts in a
+checkout that another herdr agent is working in, or (outside herdr) that already has uncommitted
+changes, the context warns it not to touch them and to isolate itself. See
+[ADR-0012](docs/adr/0012-session-worktrees.md).
 
 ## Inkdrop
 

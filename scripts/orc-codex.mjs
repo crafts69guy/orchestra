@@ -1,6 +1,12 @@
 import { spawnSync } from 'node:child_process';
 import { basename, join } from 'node:path';
-import { buildContext, readRules } from '../hooks/session-start.mjs';
+import {
+  buildContext,
+  collisionWarning,
+  readRules,
+  scratchDir,
+  withWarning,
+} from '../hooks/session-start.mjs';
 import { cccEnabled, codexMcpArgs } from './ccc.mjs';
 import { inkdropFlag } from './inkdrop.mjs';
 
@@ -85,9 +91,12 @@ export function run({
     ccc,
     panes: env.ORC_PANES === '1' && env.HERDR_ENV === '1',
     inkdrop: inkdropFlag(env, cwd, { exec }),
+    scratch: scratchDir(exec, cwd),
   });
+  // Codex hooks may be untrusted, so the launcher warns itself; a launch is always a startup.
+  const warning = collisionWarning({ env, cwd, exec, source: 'startup' });
   const prefix = buildArgs({
-    context,
+    context: withWarning(context, warning),
     agents: agentArgs(root, { read, readdir }),
     commonDir: gitDir(cwd),
     mcp: ccc ? codexMcpArgs() : [],
