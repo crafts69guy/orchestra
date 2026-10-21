@@ -4,8 +4,9 @@ Only in the orc repository (it has `rules/orchestrator.md` and `evals/`), on a
 feature branch, when the user asks. One lesson per round.
 
 1. **Collect** `orc`-scope lessons: this repo's `.orc/lessons.md`, plus other
-   repos' through `mcp__inkdrop__search-notes` with
-   `book:"<notebook>" tag:orc-lesson` (read at most 10 notes). A candidate has
+   repos' through `mcp__inkdrop__search-notes` with `tag:orc-lesson
+   status:active` and no notebook qualifier: notebook search does not include
+   sub-notebooks (read at most 10 notes). A candidate has
    a net score of `+2` or more, or shows up in 2+ repos.
 2. **Locate** the behaviour to change: a line of `rules/orchestrator.md`, an
    `agents/*.md` body or a skill. If no wording change would have prevented it,

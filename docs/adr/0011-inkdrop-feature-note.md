@@ -35,10 +35,16 @@ a local HTTP server and an official MCP server.
   and are sent only to a loopback host. A body write is GET, splice, then `POST /notes` with
   `_rev`; a conflict re-reads and retries once, then fails. Text outside the block is never
   changed. orc never deletes, and it writes only notes it created or claimed, the `orc` tag, and
-  (with `--create`) the notebook.
+  (with `--create`) the notebook and its parent. `init --move` changes only the `bookId` of this
+  repo's notes in the old notebook: its own lesson notes, its linked feature notes and unclaimed
+  `orc` specs.
 - **Repo mapping** lives in local git config (`orc.inkdropBook`, `orc.inkdropBookName`,
-  `orc.inkdropTag`), written by `orc inkdrop init`. It stores ids, so renames are safe, and nothing
-  is tracked.
+  `orc.inkdropTag`), written by `orc inkdrop init`. It stores ids, and searches use the
+  `bookId:<id>` qualifier, so renames are safe (a `book:"<name>"` keyword broke after one).
+  Nothing is tracked. `--parent <name>` (or `orc.inkdropParent`, local or global) maps the repo to
+  a sub-notebook of that root notebook; `--move` carries the old notebook's orc notes over on a
+  remap. Inkdrop's notebook search does not include sub-notebooks, so cross-repo lesson recall
+  searches by tag.
 - **Gate**, the same shape as ccc (ADR-0007): the rule lines marked `orc:inkdrop` and the context
   line naming the notebook are injected when `ORC_INKDROP` is not `0`, both credential vars are
   set and the repo is mapped. The check is offline: SessionStart makes no HTTP call.

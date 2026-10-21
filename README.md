@@ -171,8 +171,15 @@ repo. Then map the repo to a notebook (default: the repo directory name, matched
 case-insensitively; `--create` makes it) and create the `orc` tag:
 
 ```sh
-orc inkdrop init [--book <name>] [--create]
+orc inkdrop init [--book <name>] [--parent <name>] [--create] [--move]
 ```
+
+With `--parent Orc` (or `git config --global orc.inkdropParent Orc` once for every repo) the
+repo's notebook is a sub-notebook of the root notebook `Orc`, e.g. `Orc/orchestra`, instead of a
+root notebook of its own. Re-running `init` on a mapped repo remaps it; `--move` moves this
+repo's notes in the old notebook along (its lessons, linked feature notes and unclaimed specs).
+Without `--move`, init refuses to remap while such notes remain. Searches use the notebook id, so
+renaming a notebook in Inkdrop is safe.
 
 Five flows, each driven by the orchestrator once the session context names the notebook:
 

@@ -323,12 +323,14 @@ test('missing credentials, outside git and an uninitialised repo fail early', as
 
 test('bad args print the usage', async () => {
   const usage =
-    'usage: orc inkdrop init [--book <name>] [--create] | inbox [--json] | claim <note-id> <feature> | push <feature> [--done] | pull <feature> | lessons\n';
+    'usage: orc inkdrop init [--book <name>] [--parent <name>] [--create] [--move] | inbox [--json] | claim <note-id> <feature> | push <feature> [--done] | pull <feature> | lessons\n';
   for (const args of [
     [],
     ['nope'],
     ['init', '--book'],
     ['init', '--book', '--create'],
+    ['init', '--parent'],
+    ['init', '--parent', '--move'],
     ['init', 'x'],
     ['inbox', '--all'],
     ['inbox', '--json', 'x'],
@@ -404,6 +406,59 @@ test('init without a match fails unless --create, which creates the notebook', a
   );
 });
 
+test('init --parent picks the child under a root parent; git config supplies the parent', async () => {
+  const books = [
+    { _id: 'book:Other', name: 'repo', parentBookId: null },
+    { _id: 'book:P', name: 'Work', parentBookId: null },
+    { _id: 'book:Nested', name: 'work', parentBookId: 'book:Other' },
+    { _id: 'book:C', name: 'Repo', parentBookId: 'book:P' },
+  ];
+  const server = inkdrop({ books, tags: [{ _id: 'tag:O', name: 'orc' }] });
+  const deps = fake({ server, config: null });
+  const r = await run(['init', '--parent', 'WORK'], deps, ROOT);
+  assert.deepEqual(r, { code: 0, out: 'notebook Work/Repo (book:C), tag orc (tag:O)\n', err: '' });
+  assert.ok(deps.calls.includes('git config orc.inkdropBookName Work/Repo'));
+  assert.ok(!deps.calls.includes('git config --get orc.inkdropParent'), 'the flag wins');
+
+  const viaGit = fake({
+    server,
+    config: null,
+    git: { 'git config --get orc.inkdropParent': ok('Work\n') },
+  });
+  assert.equal((await run(['init'], viaGit, ROOT)).out, r.out);
+  assert.ok(viaGit.calls.includes('git config orc.inkdropBook book:C'));
+});
+
+test('init --parent fails naming the missing notebook unless --create, which nests it', async () => {
+  const noParent = await run(['init', '--parent', 'Work'], fake({ config: null }), ROOT);
+  assert.equal(
+    noParent.err,
+    'orc inkdrop: no root notebook named "Work"; pass --create to create it\n',
+  );
+  const server = inkdrop({ books: [{ _id: 'book:P', name: 'Work' }] });
+  const noChild = await run(['init', '--parent', 'Work'], fake({ server, config: null }), ROOT);
+  assert.equal(
+    noChild.err,
+    'orc inkdrop: no notebook named "repo" under "Work"; pass --create to create it\n',
+  );
+  assert.ok(!server.calls.some((c) => c.method === 'POST'));
+
+  const empty = inkdrop({ tags: [{ _id: 'tag:O', name: 'orc' }] });
+  const r = await run(
+    ['init', '--create', '--parent', 'Work', '--book', 'Orc'],
+    fake({ server: empty, config: null }),
+    ROOT,
+  );
+  assert.equal(r.out, 'notebook Work/Orc (book:new2), tag orc (tag:O)\n');
+  assert.deepEqual(
+    empty.books.map((b) => [b._id, b.name, b.parentBookId]),
+    [
+      ['book:new1', 'Work', null],
+      ['book:new2', 'Orc', 'book:new1'],
+    ],
+  );
+});
+
 test('inbox lists only unclaimed tagged notes of the configured book', async () => {
   const server = inkdrop({
     notes: {
@@ -424,7 +479,7 @@ test('inbox lists only unclaimed tagged notes of the configured book', async () 
     err: '',
   });
   const { query } = server.calls[0];
-  assert.equal(query.get('keyword'), 'book:"My Book" tag:orc status:active');
+  assert.equal(query.get('keyword'), 'bookId:book:B1 tag:orc status:active');
   assert.equal(query.get('limit'), '100');
   const json = JSON.parse((await run(['inbox', '--json'], deps, ROOT)).out);
   assert.deepEqual(json, {
@@ -812,7 +867,7 @@ test('lessons creates, updates, drops and skips unchanged notes of this repo onl
     err: '',
   });
   const list = server.calls.find((c) => c.method === 'GET' && c.path === '/notes');
-  assert.equal(list.query.get('keyword'), 'book:"My Book" tag:orc-lesson');
+  assert.equal(list.query.get('keyword'), 'bookId:book:B1 tag:orc-lesson');
   const { 'note:new1': fresh, ...rest } = server.notes;
   const want = renderLesson('repo', l6);
   assert.deepEqual(fresh, {
@@ -941,4 +996,112 @@ test('lessons fails before any write when a tagged note in the book has a damage
     err: 'orc inkdrop: note:bad has a damaged orc block; fix it in Inkdrop\n',
   });
   assert.ok(!server.calls.some((c) => c.method === 'POST'), 'nothing written');
+});
+
+/** `fake` whose git config is stateful: `git config <key> <value>` changes later reads. */
+function statefulGit(opts, initial) {
+  const deps = fake(opts);
+  const values = new Map(Object.entries(initial));
+  const exec = deps.exec;
+  deps.exec = (cmd, args, cwd) => {
+    if (args[0] === 'config' && args[1] === '--get-regexp') {
+      deps.calls.push([cmd, ...args].join(' '));
+      return ok([...values].map(([k, v]) => `${k.toLowerCase()} ${v}\n`).join(''));
+    }
+    if (args[0] === 'config' && args.length === 3 && !args[1].startsWith('--')) {
+      values.set(args[1], args[2]);
+    }
+    return exec(cmd, args, cwd);
+  };
+  return { deps, values };
+}
+
+test('init on a remap fails while this repo has orc notes in the old book; --move moves them', async () => {
+  const BAD_LESSON = { tags: ['tag:LT'], body: LONE_BEGIN, bookId: 'book:Old' };
+  const old = { bookId: 'book:Old' };
+  const notes = {
+    'note:inbox': note('note:inbox', old),
+    'note:linked': note('note:linked', {
+      ...old,
+      body: 'x\n\n<!-- orc:begin -->\nb\n<!-- orc:end -->',
+    }),
+    'note:claimed-elsewhere': note('note:claimed-elsewhere', {
+      ...old,
+      body: 'x\n\n<!-- orc:begin -->\nb\n<!-- orc:end -->',
+    }),
+    'note:lesson': lessonNote('note:lesson', 'repo', lesson('L001', 1, 0), old),
+    'note:other-repo': lessonNote('note:other-repo', 'other', lesson('L001', 1, 0), old),
+    'note:lesson-noblock': note('note:lesson-noblock', { ...old, tags: ['tag:LT'] }),
+    'note:plain': note('note:plain', { ...old, tags: ['tag:x'] }),
+    'note:notags': note('note:notags', { ...old, tags: undefined, body: undefined }),
+    'note:elsewhere': note('note:elsewhere', { bookId: 'book:B9' }),
+  };
+  const tags = [
+    { _id: 'tag:T1', name: 'orc' },
+    { _id: 'tag:LT', name: 'orc-lesson' },
+  ];
+  const books = [{ _id: 'book:New', name: 'repo' }];
+  const files = { [`${ROOT}/.scratch/feat/inkdrop.json`]: link('note:linked', 'h') };
+  const initial = {
+    'orc.inkdropBook': 'book:Old',
+    'orc.inkdropBookName': 'Orchestra',
+    'orc.inkdropTag': 'tag:T1',
+  };
+  const server = inkdrop({ notes, books, tags, conflicts: 1 });
+  const before = structuredClone(server.notes);
+  const { deps, values } = statefulGit({ server, files }, initial);
+
+  assert.deepEqual(await run(['init'], deps, ROOT), {
+    code: 1,
+    out: '',
+    err: 'orc inkdrop: 3 orc notes in book:Old; rerun with --move to move them, or move them in Inkdrop first\n',
+  });
+  assert.deepEqual(server.notes, before, 'no note write');
+  assert.deepEqual(Object.fromEntries(values), initial, 'no config write');
+  const list = server.calls.find((c) => c.path === '/notes');
+  assert.equal(list.query.get('keyword'), 'bookId:book:Old');
+  assert.equal(list.query.get('limit'), '1000');
+  assert.equal(server.calls.filter((c) => c.path === '/tags').length, 1, 'tags fetched once');
+
+  assert.equal(
+    (await run(['init', '--move'], deps, ROOT)).out,
+    'notebook repo (book:New), tag orc (tag:T1)\nmoved 3 notes from book:Old\n',
+  );
+  for (const id of ['note:inbox', 'note:linked', 'note:lesson']) {
+    assert.deepEqual(server.notes[id], {
+      ...before[id],
+      bookId: 'book:New',
+      _rev: '2-x',
+      updatedAt: NOW.getTime(),
+    });
+  }
+  for (const id of Object.keys(before)) {
+    if (!['note:inbox', 'note:linked', 'note:lesson'].includes(id)) {
+      assert.deepEqual(server.notes[id], before[id], id);
+    }
+  }
+  assert.equal(values.get('orc.inkdropBook'), 'book:New');
+  assert.equal(values.get('orc.inkdropBookName'), 'repo');
+  assert.equal(
+    (await run(['init', '--move'], deps, ROOT)).out,
+    'notebook repo (book:New), tag orc (tag:T1)\n',
+  );
+
+  const damaged = inkdrop({ notes: { 'note:bad': note('note:bad', BAD_LESSON) }, books, tags });
+  const bad = await run(['init', '--move'], statefulGit({ server: damaged }, initial).deps, ROOT);
+  assert.equal(bad.err, 'orc inkdrop: note:bad has a damaged orc block; fix it in Inkdrop\n');
+  assert.ok(!damaged.calls.some((c) => c.method === 'POST'), 'nothing written');
+
+  const noLessonTag = inkdrop({
+    notes: { 'note:lesson': lessonNote('note:lesson', 'repo', lesson('L001', 1, 0), old) },
+    books,
+    tags: [tags[0]],
+  });
+  const { deps: d2, values: v2 } = statefulGit({ server: noLessonTag }, initial);
+  assert.equal(
+    (await run(['init'], d2, ROOT)).out,
+    'notebook repo (book:New), tag orc (tag:T1)\n',
+    'no movable notes: remaps normally',
+  );
+  assert.equal(v2.get('orc.inkdropBook'), 'book:New');
 });

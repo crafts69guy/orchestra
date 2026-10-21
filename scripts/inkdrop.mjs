@@ -4,7 +4,7 @@ import { lessonsPath, parseLessons, selectLessons } from './lib/lessons.mjs';
 import { collect, mainRoot, parseBase } from './status.mjs';
 
 const USAGE =
-  'usage: orc inkdrop init [--book <name>] [--create] | inbox [--json] | claim <note-id> <feature> | push <feature> [--done] | pull <feature> | lessons\n';
+  'usage: orc inkdrop init [--book <name>] [--parent <name>] [--create] [--move] | inbox [--json] | claim <note-id> <feature> | push <feature> [--done] | pull <feature> | lessons\n';
 const DEFAULT_URL = 'http://localhost:19840';
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']); // URL.hostname keeps IPv6 brackets
 const TIMEOUT_MS = 5000;
@@ -349,39 +349,123 @@ export function push(deps, cwd, feature, { done = false } = {}) {
   return attempt(() => pushFeature(deps, cwd, feature, done));
 }
 
-/** The tag named `name` from `GET /tags`, created when missing. */
-async function ensureTag(ctx, name, time) {
-  const tags = await ctx.call('GET', '/tags', { query: { limit: '1000' } });
+/** The tag named `name` from `tags` (default: `GET /tags`), created when missing. */
+async function ensureTag(ctx, name, time, tags = null) {
+  tags ??= await ctx.call('GET', '/tags', { query: { limit: '1000' } });
   const tag = tags.find((t) => t.name === name);
   if (tag) return tag;
   const doc = { name, color: 'default', createdAt: time, updatedAt: time };
   return { ...doc, _id: await create(ctx, 'tag', doc) };
 }
 
+const sameName = (b, name) => b.name?.toLowerCase() === name.toLowerCase();
+
+/** The first of `books` matching `pick`, else a new notebook (`--create`), else a `Fail`. */
+async function findBook(ctx, flags, books, pick, doc, missing) {
+  const book = books.find(pick);
+  if (book) return book;
+  if (!flags.create) throw new Fail(`orc inkdrop: ${missing}; pass --create to create it`);
+  return { ...doc, _id: await create(ctx, 'book', doc) };
+}
+
+/** `orc.inkdropParent` from git config (local or global), or null. */
+function parentName(deps, root) {
+  const r = deps.exec('git', ['config', '--get', 'orc.inkdropParent'], root);
+  return (r.status === 0 && r.stdout.trim()) || null;
+}
+
+/**
+ * Moves this repo's notes from the `old` book to `bookId`, changing only `bookId` (never deletes):
+ * `orc-lesson` notes whose identity is this repo's, and `orc` notes linked locally or unclaimed (no
+ * block). Without `flags.move` any such note fails the run before a write. Returns the output line.
+ */
+async function relocate(ctx, deps, flags, old, bookId, { tag, lesson }) {
+  // ponytail: one page of 1000; add skip paging if a notebook ever holds more orc notes.
+  const found = await ctx.call('GET', '/notes', {
+    query: { keyword: `bookId:${old}`, limit: '1000' },
+  });
+  const repo = repoKey(deps, ctx.root);
+  const linked = linkedNotes(deps, ctx.root);
+  // Identify every candidate first, so a damaged lesson block fails the run before any write.
+  const notes = found.filter((n) => {
+    if (n.bookId !== old) return false;
+    const body = n.body ?? '';
+    const isLesson =
+      lesson && n.tags?.includes(lesson._id) && lessonIdentity(n._id, body)?.startsWith(`${repo}/`);
+    const isOrc = n.tags?.includes(tag._id) && (linked.has(n._id) || locate(body) === null);
+    return Boolean(isLesson || isOrc);
+  });
+  if (!flags.move) {
+    if (!notes.length) return '';
+    throw new Fail(
+      `orc inkdrop: ${notes.length} orc notes in ${old}; rerun with --move to move them, or move them in Inkdrop first`,
+    );
+  }
+  for (const n of notes) await save(ctx, deps, n._id, (note) => ({ ...note, bookId }));
+  return `moved ${notes.length} notes from ${old}\n`;
+}
+
+/**
+ * Maps the repo to a notebook (`--book`, default the repo basename), under the root notebook
+ * `--parent` (else `orc.inkdropParent`) when given; `--create` creates what is missing. On a remap,
+ * `--move` moves the old book's orc notes of this repo; without it, any such note fails the run.
+ */
 async function init(deps, cwd, flags) {
   const ctx = setup(deps, cwd, false);
   const name = flags.book ?? basename(ctx.root);
+  const parent = flags.parent ?? parentName(deps, ctx.root);
   const time = deps.now().getTime();
+  const stamps = { createdAt: time, updatedAt: time };
   const books = await ctx.call('GET', '/books', { query: { limit: '1000' } });
-  let book = books.find((b) => b.name?.toLowerCase() === name.toLowerCase());
-  if (!book && !flags.create) {
-    throw new Fail(`orc inkdrop: no notebook named "${name}"; pass --create to create it`);
+  let book;
+  let display;
+  if (parent === null) {
+    book = await findBook(
+      ctx,
+      flags,
+      books,
+      (b) => sameName(b, name),
+      { name, parentBookId: null, ...stamps },
+      `no notebook named "${name}"`,
+    );
+    display = book.name;
+  } else {
+    const top = await findBook(
+      ctx,
+      flags,
+      books,
+      (b) => !b.parentBookId && sameName(b, parent),
+      { name: parent, parentBookId: null, ...stamps },
+      `no root notebook named "${parent}"`,
+    );
+    book = await findBook(
+      ctx,
+      flags,
+      books,
+      (b) => b.parentBookId === top._id && sameName(b, name),
+      { name, parentBookId: top._id, ...stamps },
+      `no notebook named "${name}" under "${top.name}"`,
+    );
+    display = `${top.name}/${book.name}`;
   }
-  if (!book) {
-    book = { name, parentBookId: null, createdAt: time, updatedAt: time };
-    book._id = await create(ctx, 'book', book);
+  const tags = await ctx.call('GET', '/tags', { query: { limit: '1000' } });
+  const tag = await ensureTag(ctx, TAG, time, tags);
+  const lesson = tags.find((t) => t.name === LESSON_TAG);
+  const old = ctx.config.book;
+  let moved = '';
+  if (old && old !== book._id) {
+    moved = await relocate(ctx, deps, flags, old, book._id, { tag, lesson });
   }
-  const tag = await ensureTag(ctx, TAG, time);
   const settings = [
     ['orc.inkdropBook', book._id],
-    ['orc.inkdropBookName', book.name],
+    ['orc.inkdropBookName', display],
     ['orc.inkdropTag', tag._id],
   ];
   for (const [key, value] of settings) {
     const r = deps.exec('git', ['config', key, value], ctx.root);
     if (r.status !== 0) throw new Fail(`orc inkdrop: git config ${key} failed: ${r.stderr.trim()}`);
   }
-  return `notebook ${book.name} (${book._id}), tag ${TAG} (${tag._id})\n`;
+  return `notebook ${display} (${book._id}), tag ${TAG} (${tag._id})\n${moved}`;
 }
 
 /** Note ids linked by any `<root>/.scratch/<feature>/inkdrop.json`; unreadable ones are skipped. */
@@ -406,7 +490,7 @@ function linkedNotes(deps, root) {
 async function inbox(deps, cwd, json) {
   const { root, config, call } = setup(deps, cwd);
   const linked = linkedNotes(deps, root);
-  const keyword = `book:"${config.bookName}" tag:${TAG} status:active`;
+  const keyword = `bookId:${config.book} tag:${TAG} status:active`;
   const found = await call('GET', '/notes', { query: { keyword, limit: '100' } });
   // The keyword is a hint; the filter decides: exact book, tag id, no marker lines at all (a damaged
   // block counts as claimed) and not linked locally (a truncated body may hide the block).
@@ -521,7 +605,7 @@ async function lessons(deps, cwd) {
   const time = deps.now().getTime();
   const tag = await ensureTag(ctx, LESSON_TAG, time);
   // ponytail: one page of 1000; add skip paging if a notebook ever holds more lesson notes.
-  const keyword = `book:"${ctx.config.bookName}" tag:${LESSON_TAG}`;
+  const keyword = `bookId:${ctx.config.book} tag:${LESSON_TAG}`;
   const found = await ctx.call('GET', '/notes', { query: { keyword, limit: '1000' } });
   // Identify every tagged note first, so a damaged block fails the run before any write.
   const mine = found
@@ -573,11 +657,16 @@ async function lessons(deps, cwd) {
 
 /** `init` flags, or null on anything unexpected. */
 function initFlags(rest) {
-  const flags = { book: undefined, create: false };
+  const flags = { book: undefined, parent: undefined, create: false, move: false };
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === '--create') flags.create = true;
-    else if (rest[i] === '--book' && rest[i + 1] && !rest[i + 1].startsWith('--')) {
-      flags.book = rest[++i];
+    else if (rest[i] === '--move') flags.move = true;
+    else if (
+      (rest[i] === '--book' || rest[i] === '--parent') &&
+      rest[i + 1] &&
+      !rest[i + 1].startsWith('--')
+    ) {
+      flags[rest[i].slice(2)] = rest[++i];
     } else return null;
   }
   return flags;
