@@ -215,7 +215,7 @@ Exit codes pass through from the child (a signal becomes 1); a missing
 | **Orchestrator** | Opus (session model) | all | small, fully known edits | owns scope, architecture, merges, conflicts |
 | **scoper** | Haiku / low, 30 turns | Read, Grep, Glob, Bash, ToolSearch, `cocoindex-code` search | no (`disallowedTools: Write, Edit`) | returns a brief with file citations |
 | **implementer** | Sonnet / medium | Read, Write, Edit, Grep, Glob, Bash | yes, in its assigned checkout only | never commits; reports status + evidence |
-| **reviewer** | Opus / high | Read, Grep, Glob, Bash | no | fresh context; correctness pass then ponytail over-engineering pass |
+| **reviewer** | Opus / high | Read, Grep, Glob, Bash | no | fresh context; correctness pass then over-engineering pass |
 | **shipper** | Haiku / low, 15 turns | Read, Bash | git only | commit, push, PR; only after review and user approval |
 
 Every role has an explicit `tools:` allowlist because subagents otherwise inherit
