@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util';
 import { hasEvidence } from '../hooks/subagent-stop.mjs';
 import { ensureIgnored, REPORT_DIR } from './orc-wt.mjs';
 
-const USAGE =
+export const USAGE =
   'usage: orc pane start <feature> <task> --path <worktree> --brief <file> [--kind claude|codex] [--here] | orc pane wait <task> --path <worktree> [--timeout ms] | orc pane prompt <task> --path <worktree> (--text <t> | --file <f>) | orc pane close <task> --path <worktree>';
 export const GATE_ERROR = 'orc: pane mode needs herdr (HERDR_ENV=1)';
 const PROMPT_WAIT = ['--wait', '--until', 'working', '--until', 'blocked', '--timeout', '30000'];

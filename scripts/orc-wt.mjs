@@ -5,7 +5,7 @@ import { parseArgs } from 'node:util';
 
 export const WORKTREE_DIR = '.worktrees';
 const PATH_TEMPLATE = `worktree-path="${WORKTREE_DIR}/{{ branch | sanitize }}"`;
-const USAGE =
+export const USAGE =
   'usage: orc wt new <feature> <task>... [--yes] | orc wt merge <feature> <task> --message <msg> [--yes] | orc wt remove <feature> <task> [--yes] | orc wt list <feature> | orc wt session <branch> [--base <ref>] [--yes]';
 
 /** Real exec: never throws; a spawn failure (e.g. ENOENT) becomes status 127. */

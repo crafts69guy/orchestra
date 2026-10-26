@@ -109,6 +109,7 @@ codex plugin add orc@orchestra
 | `orc wt session <branch> [--base <ref>] [--yes]` | creates or reuses a session worktree for `<branch>` (`--base` applies only to a new branch); prints `{branch, path, action}` |
 | `orc pane start <F> <T> --path <wt> --brief <file> [--here]`, `wait\|prompt\|close <T> --path <wt> ...` | herdr pane workers for the `dispatch` skill (pane mode, below) or pair mode (`--here`); prints JSON |
 | `orc eval [args...]` | behaviour evals; only from a git checkout (see [AGENTS.md](AGENTS.md)) |
+| `orc completion fish` | prints a fish completion script: `orc completion fish > ~/.config/fish/completions/orc.fish` |
 | `orc --help`, `orc --version` | usage and version |
 
 `orc status --json`, `orc doctor --json` and `orc context --json` are a versioned contract

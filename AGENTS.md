@@ -54,7 +54,9 @@ see [ADR-0009](docs/adr/0009-herdr-pane-workers.md)), `scripts/orc-codex.mjs` (`
 `scripts/ccc.mjs` (`orc ccc`, plus the cocoindex-code MCP gate the launchers and the session hook
 share), `scripts/doctor.mjs` (`orc doctor [--json]`), `scripts/status.mjs` (`orc status [--json]`)
 and `scripts/context.mjs` (`orc context`; it shares `scripts/lib/report.mjs` with doctor), and
-runs `orc claude`, `orc update` and `orc eval` itself.
+runs `orc claude`, `orc update` and `orc eval` itself. `orc completion fish` prints the static fish
+completion script in `scripts/completion.mjs`; `test/completion.test.mjs` fails when a command or
+a USAGE `--flag` is missing from it.
 Each module takes its process, filesystem and spawn dependencies as arguments. See
 [ADR-0005](docs/adr/0005-orc-cli.md).
 

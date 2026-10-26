@@ -107,7 +107,7 @@ orchestra/
 │   ├── session-start.mjs        # ORC gate, rules injection, wt check
 │   ├── guard.mjs                # PreToolUse: push/PR only from shipper
 │   └── subagent-stop.mjs        # implementer evidence gate (blocks → .orc/signals.jsonl)
-├── bin/orc                     # CLI entry (npm bin): claude, codex, wt, pane, status, inkdrop, doctor, context, update, eval
+├── bin/orc                     # CLI entry (npm bin): claude, codex, wt, pane, status, inkdrop, doctor, context, update, eval, completion
 ├── scripts/
 │   ├── orc.mjs                 # subcommand dispatcher, `orc claude`
 │   ├── ccc.mjs                  # `orc ccc init`, MCP injection gate (cocoindex-code)
@@ -118,6 +118,7 @@ orchestra/
 │   ├── status.mjs               # `orc status`: plan tasks, worktrees, agents, reports (ADR-0010)
 │   ├── inkdrop.mjs              # `orc inkdrop`: feature note in Inkdrop (ADR-0011)
 │   ├── context.mjs              # `orc context`: static audit of loaded context (ADR-0008)
+│   ├── completion.mjs           # `orc completion fish`: static fish completion script
 │   └── gen-codex-agents.mjs, lib/
 ├── test/                        # node:test, ≥98% coverage
 ├── evals/                       # claude plugin eval suites
@@ -204,6 +205,7 @@ flowchart LR
 | `orc context [--scope user\|project\|all] [--json]` | static audit of what Claude Code and Codex load (memory and imports, skills, agents, commands, plugins, MCP): token estimates, findings, exit 1 only on `✗` ([ADR-0008](adr/0008-orc-context.md)) |
 | `orc update` | `npm i -g` the CLI (skipped in a git checkout), then updates the plugin for each harness that has the `orchestra` marketplace, then `uv tool upgrade cocoindex-code` when it is installed; runs every step, exits with the first failure |
 | `orc eval [args]` | behaviour evals; exits 1 when `evals/` is absent (npm install) |
+| `orc completion fish` | prints a static fish completion script (commands, subcommands, flags; no feature names) |
 
 Exit codes pass through from the child (a signal becomes 1); a missing
 `claude` or `codex` binary exits 127. Permission bypass is never the default.

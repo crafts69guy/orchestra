@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pluginRoot, which } from '../hooks/session-start.mjs';
 import { run as ccc, cccEnabled, claudeMcpArg } from './ccc.mjs';
+import { FISH } from './completion.mjs';
 import { run as context } from './context.mjs';
 import { run as doctor } from './doctor.mjs';
 import { run as inkdrop, push as inkdropPush } from './inkdrop.mjs';
@@ -34,6 +35,7 @@ commands:
   context [--scope ...] [--json]   audit what Claude/Codex load into context
   update                   update the npm CLI and the installed Claude/Codex plugins
   eval [args]              run the behaviour evals (git checkout only)
+  completion fish          print the fish completion script
   help, -h, --help         show this help
   -V, --version            print the version
 
@@ -354,6 +356,14 @@ export const commands = {
     }
     const r = io.spawn('sh', [script, ...args], { cwd: io.root, env: io.env });
     return spawnExit(r, 'sh', io.stderr, 'a POSIX shell is required.');
+  },
+  completion(args, io) {
+    if (args.length !== 1 || args[0] !== 'fish') {
+      io.stderr('usage: orc completion fish\n');
+      return 1;
+    }
+    io.stdout(FISH);
+    return 0;
   },
 };
 

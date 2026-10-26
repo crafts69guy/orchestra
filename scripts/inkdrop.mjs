@@ -3,7 +3,7 @@ import { basename, join } from 'node:path';
 import { lessonsPath, parseLessons, selectLessons } from './lib/lessons.mjs';
 import { collect, mainRoot, parseBase } from './status.mjs';
 
-const USAGE =
+export const USAGE =
   'usage: orc inkdrop init [--book <name>] [--parent <name>] [--create] [--move] | inbox [--json] | claim <note-id> <feature> | push <feature> [--done] | pull <feature> | lessons\n';
 const DEFAULT_URL = 'http://localhost:19840';
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']); // URL.hostname keeps IPv6 brackets
