@@ -22,6 +22,7 @@ import {
   run,
   splitFlag,
   splitLevel,
+  splitPair,
   splitPanes,
   splitYolo,
   USAGE,
@@ -506,6 +507,22 @@ test('splitPanes strips --panes; claude --panes sets ORC_PANES and stays out of 
   const plain = fakeIo();
   run(['claude'], plain);
   assert.equal('ORC_PANES' in plain.spawned[0].opts.env, false);
+});
+
+test('claude --pair sets ORC_PAIR, stays out of argv; with --panes it is a usage error', () => {
+  assert.deepEqual(splitPair(['--pair', 'hi']), { pair: true, rest: ['hi'] });
+  const io = fakeIo();
+  assert.equal(run(['claude', '--pair', 'hi'], io), 0);
+  assert.deepEqual(io.spawned[0].args, ['--model', 'opus', 'hi']);
+  assert.equal(io.spawned[0].opts.env.ORC_PAIR, '1');
+  assert.equal('ORC_PANES' in io.spawned[0].opts.env, false);
+  const plain = fakeIo();
+  run(['claude'], plain);
+  assert.equal('ORC_PAIR' in plain.spawned[0].opts.env, false);
+  const both = fakeIo();
+  assert.equal(run(['claude', '--pair', '--panes'], both), 2);
+  assert.match(both.err, /^orc: --pair and --panes cannot be combined\nusage: orc/);
+  assert.equal(both.spawned.length, 0);
 });
 
 test('pane prints the JSON result and returns its code', () => {

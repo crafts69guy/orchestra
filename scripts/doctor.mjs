@@ -82,7 +82,7 @@ export async function run(deps = realDeps) {
     checkTool(deps, 'git', ['--version'], 'install git'),
     checkTool(deps, 'wt', ['--version'], 'brew install worktrunk'),
     checkTool(deps, 'ccc', ['version'], "uv tool install 'cocoindex-code[full]'", warn),
-    // optional: only pane mode (`orc claude --panes`) needs herdr
+    // optional: only pane and pair mode (`orc claude --panes|--pair`) need herdr
     deps.env?.HERDR_ENV === '1'
       ? checkTool(deps, 'herdr', ['--version'], 'see https://herdr.dev', warn)
       : info('herdr', 'not in herdr (pane mode off)'),

@@ -38,7 +38,8 @@ through a JSON CLI (`herdr tab|pane|agent ...`).
     settled state and reads `<worktree>/.orc/report.md`, reporting `evidence`
     with the subagent-stop hook's `hasEvidence`.
   - `prompt` sends follow-ups prefixed `Follow-up:`; `close` closes the pane
-    only when it sits in an `orc:*` tab. Not a cwd check: after
+    only when it sits in an `orc:*` tab (or, since ADR-0014, is itself
+    labelled `orc:*`). Not a cwd check: after
     `orc wt merge`, worktrunk moves the worktree, and the agent's cwd with
     it, to `.git/wt/trash/`. `orc wt remove <feature> <task>` drops an
     abandoned task's worktree and branch.

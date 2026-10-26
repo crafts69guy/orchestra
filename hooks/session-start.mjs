@@ -55,7 +55,8 @@ const LESSONS_HEADER =
 
 /**
  * `orcPath` is the absolute `bin/orc`; plugin bin/ is not on PATH under Codex, so name it.
- * `flags.panes` adds `orc pane` to the CLI line (and keeps the `orc:panes` rule line).
+ * `flags.panes` adds `orc pane` to the CLI line (and keeps the `orc:panes` rule line);
+ * `flags.pair` does the same with the `orc:pair` line.
  * `flags.inkdrop` (`{ name, id }` or false) adds `orc inkdrop` and an `Inkdrop notebook:` line.
  * `flags.scratch` (a path or null) adds a `Scratch dir:` line.
  * `flags.lessons` (`{ kept, hidden }` from `readLessons`, or null) adds a `Lessons` block of the
@@ -65,9 +66,9 @@ export function buildContext(
   rules,
   hasWt,
   orcPath,
-  flags = { docs: true, ccc: false, high: false, panes: false, inkdrop: false },
+  flags = { docs: true, ccc: false, high: false, panes: false, pair: false, inkdrop: false },
 ) {
-  const pane = flags.panes ? ` and \`${orcPath} pane start|wait|prompt|close\`` : '';
+  const pane = flags.panes || flags.pair ? ` and \`${orcPath} pane start|wait|prompt|close\`` : '';
   const ink = flags.inkdrop ? ` and \`${orcPath} inkdrop inbox|claim|push|pull|lessons\`` : '';
   const book = flags.inkdrop
     ? `Inkdrop notebook: ${flags.inkdrop.name} (${flags.inkdrop.id})\n`
@@ -120,7 +121,8 @@ const ISOLATE =
 /**
  * A warning when another session may be writing to this checkout, or null. Inside herdr: other
  * agents whose cwd has this checkout as its git toplevel (task worktrees under `.worktrees/` have
- * their own). Outside herdr, at `startup` only: uncommitted changes already present.
+ * their own); in pair mode (`ORC_PAIR=1`) agents in this tab are its own worker and skipped.
+ * Outside herdr, at `startup` only: uncommitted changes already present.
  */
 export function collisionWarning({ env, cwd, exec, source }) {
   const top = toplevel(exec, cwd);
@@ -130,6 +132,7 @@ export function collisionWarning({ env, cwd, exec, source }) {
     if (!Array.isArray(agents)) return null;
     const others = agents.filter((a) => {
       if (a?.pane_id === env.HERDR_PANE_ID) return false;
+      if (env.ORC_PAIR === '1' && a?.tab_id === env.HERDR_TAB_ID) return false; // own pair worker
       const dir = a?.foreground_cwd ?? a?.cwd;
       if (typeof dir !== 'string' || (dir !== top && !dir.startsWith(`${top}/`))) return false;
       return toplevel(exec, dir) === top;
@@ -192,7 +195,8 @@ export function run({
   const context = buildContext(rules, hasCommand('wt', env.PATH), join(root, 'bin', 'orc'), {
     docs: env.ORC_DOCS !== '0',
     high: env.ORC_LEVEL === 'high',
-    panes: env.ORC_PANES === '1' && env.HERDR_ENV === '1',
+    panes: env.ORC_PANES === '1' && env.HERDR_ENV === '1' && env.ORC_PAIR !== '1',
+    pair: env.ORC_PAIR === '1' && env.HERDR_ENV === '1',
     ccc: cccEnabled(env, cwd, { exec, exists, hasCommand }),
     inkdrop: inkdropFlag(env, cwd, { exec }),
     scratch: scratchDir(exec, cwd),

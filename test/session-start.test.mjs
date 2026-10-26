@@ -296,6 +296,25 @@ test('run keeps panes lines and names orc pane only with ORC_PANES=1 inside herd
   }
 });
 
+test('run keeps the pair line (not the panes line) and names orc pane with ORC_PAIR=1 in herdr', () => {
+  const ctx = (env) => {
+    const { deps, out } = harness({
+      root: fixtureRoot('pair', 'a\nb <!-- orc:panes -->\nc <!-- orc:pair -->\n'),
+      read: readFileSync,
+    });
+    Object.assign(deps.env, env);
+    run(deps);
+    return JSON.parse(out.stdout).hookSpecificOutput.additionalContext;
+  };
+  const on = ctx({ ORC_PAIR: '1', ORC_PANES: '1', HERDR_ENV: '1' });
+  assert.match(on, /\nc\n/);
+  assert.doesNotMatch(on, /\nb\b/);
+  assert.match(on, /`\S+bin\/orc pane start\|wait\|prompt\|close`\)/);
+  const off = ctx({ ORC_PAIR: '1' });
+  assert.doesNotMatch(off, /\nc\b/);
+  assert.doesNotMatch(off, /orc pane/);
+});
+
 const INKDROP_ENV = { INKDROP_LOCAL_USERNAME: 'u', INKDROP_LOCAL_PASSWORD: 'p' };
 const inkdropExec = (_cmd, args) =>
   args[0] === 'config'
@@ -381,6 +400,18 @@ test('collisionWarning names other herdr agents in this checkout, not task workt
     /^orc: other agents are working in this checkout: p2 codex "fix", p7 claude ""\. /,
   );
   assert.match(w, /`orc wt session <branch>`.*EnterWorktree.*`orc codex --wt <branch>`/);
+});
+
+test('collisionWarning in pair mode skips agents in this tab (its own worker)', () => {
+  const agents = [
+    { pane_id: 'p2', tab_id: 't1', agent: 'codex', cwd: '/repo' },
+    { pane_id: 'p3', tab_id: 't2', agent: 'claude', cwd: '/repo' },
+  ];
+  const exec = gitExec({ tops: { '/repo': '/repo' }, herdrOut: agentList(agents) });
+  const env = { ...HERDR, HERDR_TAB_ID: 't1' };
+  const pair = collisionWarning({ env: { ...env, ORC_PAIR: '1' }, cwd: '/repo', exec });
+  assert.match(pair, /checkout: p3 claude ""\. /);
+  assert.match(collisionWarning({ env, cwd: '/repo', exec }), /checkout: p2 codex "", p3/);
 });
 
 test('collisionWarning in herdr: alone, a herdr error or bad output is null (no dirty check)', () => {

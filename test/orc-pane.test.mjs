@@ -32,6 +32,13 @@ function fake(routes = {}, { env = {}, files = {}, unlinkError } = {}) {
     calls,
     fs,
     unlinked: [],
+    made: [],
+    mkdir(p) {
+      this.made.push(['mkdir', p]);
+    },
+    append(p, text) {
+      this.made.push(['append', p, text]);
+    },
     env: { ...ENV, ...env },
     root: '/plugin',
     hasCommand: (name) => name === 'herdr',
@@ -512,6 +519,7 @@ test('prompt: not-sent at a dialog; errors for herdr and an undeletable report',
 });
 
 const tabInfo = (label) => ok({ type: 'tab_info', tab: { tab_id: 't1', label } });
+const paneInfo = (label) => ok({ type: 'pane_info', pane: { pane_id: 'p3', label } });
 const IN_TAB = {
   'herdr agent get': agent({ cwd: '/r/.git/wt/trash/F--T-1', pane_id: 'p3', tab_id: 't1' }),
 };
@@ -536,8 +544,8 @@ test('close closes the pane of an agent in an orc:* tab, whatever its cwd', () =
 
 test('close refuses outside an orc:* tab and reports herdr failures', () => {
   const refused = [
-    { ...IN_TAB, 'herdr tab get': tabInfo('main') },
-    { ...IN_TAB, 'herdr tab get': ok({ type: 'tab_info' }) },
+    { ...IN_TAB, 'herdr tab get': tabInfo('main'), 'herdr pane get': paneInfo('main') },
+    { ...IN_TAB, 'herdr tab get': ok({ type: 'tab_info' }), 'herdr pane get': ok({}) },
     { 'herdr agent get': agent({ pane_id: 'p1' }) },
     { 'herdr agent get': agent({ tab_id: 't1' }) },
     { 'herdr agent get': ok({ type: 'agent_info' }) },
@@ -546,19 +554,178 @@ test('close refuses outside an orc:* tab and reports herdr failures', () => {
     const deps = fake(routes);
     assert.deepEqual(run(CLOSE, deps, '/r'), {
       code: 1,
-      result: { status: 'refused', task: 'T', stderr: `orc: ${NAME} is not in an orc:* tab` },
+      result: {
+        status: 'refused',
+        task: 'T',
+        stderr: `orc: ${NAME} is not in an orc:* tab or pane`,
+      },
     });
     assert.ok(!call(deps, 'herdr pane close'));
   }
   const errors = [
     [{ 'herdr agent get': err('gone') }, /gone/],
     [{ ...IN_TAB, 'herdr tab get': err('tab_not_found') }, /tab_not_found/],
+    [{ ...IN_TAB, 'herdr tab get': tabInfo('main'), 'herdr pane get': err('gone') }, /gone/],
     [{ ...IN_TAB, 'herdr tab get': tabInfo('orc:F'), 'herdr pane close': err('busy') }, /busy/],
   ];
   for (const [routes, stderr] of errors) {
     const { code, result } = run(CLOSE, fake(routes), '/r');
     assert.equal(code, 1);
     assert.equal(result.status, 'error');
+    assert.match(result.stderr, stderr);
+  }
+});
+
+test('close accepts a pane labelled orc:* in a plain tab (pair mode)', () => {
+  const deps = fake({
+    ...IN_TAB,
+    'herdr tab get': tabInfo('main'),
+    'herdr pane get': paneInfo('orc:T'),
+    'herdr pane close': ok({ type: 'ok' }),
+  });
+  assert.deepEqual(run(CLOSE, deps, '/r'), {
+    code: 0,
+    result: { status: 'closed', task: 'T', pane: 'p3' },
+  });
+  assert.deepEqual(deps.calls.slice(1), [
+    ['herdr', 'tab', 'get', 't1'],
+    ['herdr', 'pane', 'get', 'p3'],
+    ['herdr', 'pane', 'close', 'p3'],
+  ]);
+});
+
+const HERE_ENV = { HERDR_PANE_ID: 'w1:p1', HERDR_TAB_ID: 'w1:t1' };
+const HERE = [...START, '--here', '--kind', 'codex'];
+const IGNORED = { 'git check-ignore': { status: 0, stdout: '', stderr: '' } };
+const herePanes = (...labels) =>
+  ok({
+    type: 'pane_list',
+    panes: [
+      { tab_id: 'w1:t1', pane_id: 'w1:p1', label: 'claude' },
+      { tab_id: 'w1:t2', pane_id: 'w1:p9', label: 'orc:Other' },
+      ...labels.map((label, i) => ({ tab_id: 'w1:t1', pane_id: `w1:p${i + 2}`, label })),
+    ],
+  });
+const SPLIT = { 'herdr pane split': ok({ type: 'pane_info', pane: { pane_id: 'w1:p5' } }) };
+
+test('start --here splits the caller pane right, labels it orc:<task>, then starts codex', () => {
+  const deps = fake(
+    {
+      ...NEW,
+      ...IGNORED,
+      'herdr pane list': herePanes(),
+      ...SPLIT,
+      'herdr pane rename': ok({ type: 'pane_info', pane: { pane_id: 'w1:p5' } }),
+      'herdr agent start': agent({}),
+      'herdr agent prompt': prompted(),
+    },
+    { env: HERE_ENV },
+  );
+  const { code, result } = run(HERE, deps, '/r');
+  assert.equal(code, 0);
+  assert.equal(result.status, 'started');
+  assert.equal(result.pane, 'w1:p5');
+  assert.deepEqual(deps.made, []);
+  assert.deepEqual(deps.calls.slice(0, 7), [
+    ['git', 'check-ignore', '-q', '.worktrees/x'],
+    ['git', 'check-ignore', '-q', '.orc/x'],
+    ['herdr', 'agent', 'get', NAME],
+    ['herdr', 'pane', 'list', '--workspace', 'w1'],
+    [
+      'herdr',
+      'pane',
+      'split',
+      'w1:p1',
+      '--direction',
+      'right',
+      '--cwd',
+      '/a',
+      '--env',
+      'ORC=1',
+      '--env',
+      'ORC_ROLE=implementer',
+      '--no-focus',
+    ],
+    ['herdr', 'pane', 'rename', 'w1:p5', 'orc:T'],
+    [
+      'herdr',
+      'agent',
+      'start',
+      NAME,
+      '--kind',
+      'codex',
+      '--pane',
+      'w1:p5',
+      '--',
+      '--sandbox',
+      'workspace-write',
+    ],
+  ]);
+});
+
+test('start --here git-ignores .orc/ in the checkout when it is not ignored yet', () => {
+  const deps = fake(
+    {
+      'git check-ignore': { status: 1, stdout: '', stderr: '' },
+      'git rev-parse': { status: 0, stdout: '.git\n', stderr: '' },
+      'herdr agent get': agent({ pane_id: 'w1:p5' }),
+      'herdr agent prompt': prompted(),
+    },
+    { env: HERE_ENV },
+  );
+  assert.equal(run(HERE, deps, '/r').code, 0);
+  assert.deepEqual(deps.made, [
+    ['mkdir', '/a/.git/info'],
+    ['append', '/a/.git/info/exclude', '.worktrees/\n.orc/\n'],
+  ]);
+  assert.equal(call(deps, 'herdr pane list'), undefined, 'a live agent skips the one-worker check');
+});
+
+test('start --here refuses a second worker and reports errors', () => {
+  const busy = fake(
+    { ...NEW, ...IGNORED, 'herdr pane list': herePanes('orc:A') },
+    { env: HERE_ENV },
+  );
+  assert.deepEqual(run(HERE, busy, '/r'), {
+    code: 1,
+    result: { status: 'error', task: 'T', stderr: 'orc: close orc:A first' },
+  });
+  assert.equal(call(busy, 'herdr pane split'), undefined);
+
+  const noPane = fake({}, { env: { HERDR_TAB_ID: 'w1:t1' } });
+  assert.equal(run(HERE, noPane, '/r').result.stderr, 'orc: --here needs HERDR_PANE_ID');
+  assert.equal(noPane.calls.length, 0);
+
+  const renameFails = fake(
+    {
+      ...NEW,
+      ...IGNORED,
+      'herdr pane list': herePanes(),
+      ...SPLIT,
+      'herdr pane rename': err('rename_failed'),
+      'herdr pane close': ok({ type: 'ok' }),
+    },
+    { env: HERE_ENV },
+  );
+  assert.match(run(HERE, renameFails, '/r').result.stderr, /rename_failed/);
+  assert.deepEqual(call(renameFails, 'herdr pane close'), ['herdr', 'pane', 'close', 'w1:p5']);
+
+  const cases = [
+    [
+      { 'git check-ignore': { status: 1 }, 'git rev-parse': { status: 128, stderr: 'not git' } },
+      /^not git$/,
+    ],
+    [{ ...IGNORED, 'herdr pane list': err('gone') }, /gone/],
+    [{ ...IGNORED, 'herdr pane list': ok({ type: 'pane_list' }) }, /no panes array/],
+    [{ ...IGNORED, 'herdr pane list': herePanes(), 'herdr pane split': err('nope') }, /nope/],
+    [
+      { ...IGNORED, 'herdr pane list': herePanes(), 'herdr pane split': ok({ pane: {} }) },
+      /no pane_id/,
+    ],
+  ];
+  for (const [routes, stderr] of cases) {
+    const { code, result } = run(HERE, fake({ ...NEW, ...routes }, { env: HERE_ENV }), '/r');
+    assert.equal(code, 1);
     assert.match(result.stderr, stderr);
   }
 });

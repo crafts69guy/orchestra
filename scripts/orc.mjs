@@ -23,7 +23,7 @@ import { mainRoot, parseBase, recordMerge, run as status } from './status.mjs';
 export const USAGE = `usage: orc <command> [args]
 
 commands:
-  claude [--yolo] [--level high] [--panes] [--wt <branch> [--base <ref>]] [args]   run claude with the orc workflow (ORC=1, --model opus by default)
+  claude [--yolo] [--level high] [--panes|--pair] [--wt <branch> [--base <ref>]] [args]   run claude with the orc workflow (ORC=1, --model opus by default)
   codex [--yolo] [--wt <branch> [--base <ref>]] [args]   run codex with the orc workflow
   wt new|merge|remove|list|session ...   manage task and session worktrees (prints JSON)
   pane start|wait|prompt|close ...   drive herdr pane workers (prints JSON; inside herdr only)
@@ -40,6 +40,7 @@ commands:
 --yolo bypasses the harness's permission prompts and sandbox; never the default.
 --level high runs implementer on opus, scoper and shipper on sonnet (default: agent defaults).
 --panes runs dispatch's implementers as herdr pane workers (ORC_PANES=1; needs herdr).
+--pair runs each implementer task in a Codex pane beside you, one at a time (ORC_PAIR=1; needs herdr).
 --wt runs the session in the worktree of <branch> (\`orc wt session\`), created from --base if new.
 `;
 
@@ -51,6 +52,11 @@ export function splitYolo(args) {
 /** Splits orc's own `--panes` flag out of the args passed through to the harness. */
 export function splitPanes(args) {
   return { panes: args.includes('--panes'), rest: args.filter((a) => a !== '--panes') };
+}
+
+/** Splits orc's own `--pair` flag out of the args passed through to the harness. */
+export function splitPair(args) {
+  return { pair: args.includes('--pair'), rest: args.filter((a) => a !== '--pair') };
 }
 
 /**
@@ -227,11 +233,16 @@ export const commands = {
   claude(args, io) {
     const { level, rest: afterLevel } = splitLevel(args);
     const { panes, rest: afterPanes } = splitPanes(afterLevel);
+    const { pair, rest: afterPair } = splitPair(afterPanes);
+    if (pair && panes) {
+      io.stderr(`orc: --pair and --panes cannot be combined\n${USAGE}`);
+      return 2;
+    }
     if (level !== undefined && level !== 'default' && level !== 'high') {
       io.stderr(`orc: unknown level ${level} (default|high)\n`);
       return 1;
     }
-    const { code, cwd, rest } = sessionCwd(afterPanes, io);
+    const { code, cwd, rest } = sessionCwd(afterPair, io);
     if (code !== undefined) return code;
     return spawnExit(
       io.spawn('claude', claudeArgs(rest, cccEnabled(io.env, cwd, io)), {
@@ -242,6 +253,7 @@ export const commands = {
           ORC_ROLE: '', // a pane worker's role must not leak into a new orchestrator
           ...(level === undefined ? {} : { ORC_LEVEL: level }),
           ...(panes ? { ORC_PANES: '1' } : {}),
+          ...(pair ? { ORC_PAIR: '1' } : {}),
         },
       }),
       'claude',
@@ -272,6 +284,8 @@ export const commands = {
       exec: io.exec,
       readFile: (p) => io.read(p, 'utf8'),
       unlink: io.unlink,
+      mkdir: io.mkdir,
+      append: io.append,
       env: io.env,
       hasCommand: io.hasCommand,
       root: io.root,

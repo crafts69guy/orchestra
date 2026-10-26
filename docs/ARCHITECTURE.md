@@ -112,7 +112,7 @@ orchestra/
 │   ├── orc.mjs                 # subcommand dispatcher, `orc claude`
 │   ├── ccc.mjs                  # `orc ccc init`, MCP injection gate (cocoindex-code)
 │   ├── orc-wt.mjs              # `orc wt`: worktrunk wrapper used by dispatch
-│   ├── orc-pane.mjs            # `orc pane`: herdr pane workers (ADR-0009)
+│   ├── orc-pane.mjs            # `orc pane`: herdr pane workers (ADR-0009, ADR-0014)
 │   ├── orc-codex.mjs           # `orc codex`: rules, agents, sandbox dirs
 │   ├── doctor.mjs               # `orc doctor`: prerequisite checks
 │   ├── status.mjs               # `orc status`: plan tasks, worktrees, agents, reports (ADR-0010)
@@ -198,7 +198,7 @@ flowchart LR
 | `orc claude\|codex --wt <branch> [--base <ref>]` | runs the session in the session worktree of `<branch>` (`orc wt session`, created from `--base` when the branch is new); prints `orc: session worktree <path> (<branch>)` to stderr first ([ADR-0012](adr/0012-session-worktrees.md)) |
 | `orc wt new\|merge\|remove\|list` | worktree helper for dispatch (§8) |
 | `orc wt session <branch> [--base <ref>] [--yes]` | creates or reuses a session worktree for one orchestrator session (§8) |
-| `orc pane start\|wait\|prompt\|close` | runs dispatch implementers as `claude`/`codex` sessions in herdr panes; inside herdr only ([ADR-0009](adr/0009-herdr-pane-workers.md)) |
+| `orc pane start\|wait\|prompt\|close` | runs dispatch implementers as `claude`/`codex` sessions in herdr panes, or with `--here` one Codex worker beside the orchestrator (`orc claude --pair`); inside herdr only ([ADR-0009](adr/0009-herdr-pane-workers.md), [ADR-0014](adr/0014-pair-panes.md)) |
 | `orc status [--json]` | per plan task: worktree, herdr agent state and report status; `--json` is the versioned contract for external clients ([ADR-0010](adr/0010-json-contract-for-external-clients.md)) |
 | `orc doctor [--json]` | checks node, git, `wt`, `ccc` (warning only), `herdr` (inside herdr only, warning only), a harness and the installed plugins; exit 1 if a required check fails; `--json` prints `{ schemaVersion, checks }` |
 | `orc context [--scope user\|project\|all] [--json]` | static audit of what Claude Code and Codex load (memory and imports, skills, agents, commands, plugins, MCP): token estimates, findings, exit 1 only on `✗` ([ADR-0008](adr/0008-orc-context.md)) |
@@ -366,8 +366,8 @@ sessions never share a checkout ([ADR-0012](adr/0012-session-worktrees.md)). It 
 user's worktrunk template puts it (by default a sibling `<repo>.<branch>`). `orc wt new` run from it
 still puts task worktrees under the main root's `.worktrees/`, and the context's `Scratch dir:` line
 keeps plans in the main root's `.scratch/`. The SessionStart hook (and `orc codex`) warns, never
-blocks: inside herdr when another agent's cwd is in this checkout, otherwise at startup when the tree
-already has uncommitted changes.
+blocks: inside herdr when another agent's cwd is in this checkout (in pair mode, not the worker in
+its own tab), otherwise at startup when the tree already has uncommitted changes.
 
 ### Task state machine
 

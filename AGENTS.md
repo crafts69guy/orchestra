@@ -61,7 +61,10 @@ Each module takes its process, filesystem and spawn dependencies as arguments. S
 `orc wt new|merge|remove|list` manages task worktrees (`remove <feature> <task>` abandons one:
 worktree and branch, even unmerged). `orc pane start <feature> <task> --path <wt> --brief <file>`
 and `orc pane wait|prompt|close <task> --path <wt>` drive pane workers; every pane subcommand
-needs `--path`, because the herdr agent name hashes the worktree path.
+needs `--path`, because the herdr agent name hashes the worktree path. `orc claude --pair` sets
+`ORC_PAIR=1` (pair mode, Claude-main only): `start --here` splits the caller's pane for one Codex
+worker labelled `orc:<task>` in the session checkout, and the collision warning skips agents in the
+caller's tab. See [ADR-0014](docs/adr/0014-pair-panes.md).
 
 `orc wt session <branch> [--base <ref>]` creates or reuses a session worktree (path from the
 user's worktrunk template); `orc claude|codex --wt <branch> [--base <ref>]` launches the harness in

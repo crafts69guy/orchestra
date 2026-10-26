@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { hasEvidence } from '../hooks/subagent-stop.mjs';
-import { REPORT_DIR } from './orc-wt.mjs';
+import { ensureIgnored, REPORT_DIR } from './orc-wt.mjs';
 
 const USAGE =
-  'usage: orc pane start <feature> <task> --path <worktree> --brief <file> [--kind claude|codex] | orc pane wait <task> --path <worktree> [--timeout ms] | orc pane prompt <task> --path <worktree> (--text <t> | --file <f>) | orc pane close <task> --path <worktree>';
+  'usage: orc pane start <feature> <task> --path <worktree> --brief <file> [--kind claude|codex] [--here] | orc pane wait <task> --path <worktree> [--timeout ms] | orc pane prompt <task> --path <worktree> (--text <t> | --file <f>) | orc pane close <task> --path <worktree>';
 export const GATE_ERROR = 'orc: pane mode needs herdr (HERDR_ENV=1)';
 const PROMPT_WAIT = ['--wait', '--until', 'working', '--until', 'blocked', '--timeout', '30000'];
 /** Default `--timeout` (ms) of each `agent wait` in `orc pane wait`: 30 minutes. */
@@ -57,6 +57,14 @@ const paneIdOf = (pane) =>
     ? { pane: pane.pane_id }
     : { error: 'herdr response has no pane_id' };
 
+const workerEnv = (env) => [
+  '--env',
+  'ORC=1',
+  '--env',
+  'ORC_ROLE=implementer',
+  ...(env.ORC_LEVEL ? ['--env', `ORC_LEVEL=${env.ORC_LEVEL}`] : []),
+];
+
 /**
  * The pane for a new worker: the root pane of a new `orc:<feature>` tab, else a split of that
  * tab (2nd worker right of the first, 3rd/4th below pane n-2: a 2x2 grid). `{ pane }` or `{ error }`.
@@ -65,8 +73,7 @@ export function workerPane(deps, feature, path) {
   const { env } = deps;
   const ws = env.HERDR_WORKSPACE_ID;
   const label = `orc:${feature}`;
-  const envArgs = ['--env', 'ORC=1', '--env', 'ORC_ROLE=implementer'];
-  if (env.ORC_LEVEL) envArgs.push('--env', `ORC_LEVEL=${env.ORC_LEVEL}`);
+  const envArgs = workerEnv(env);
   const tabs = herdr(deps, ['tab', 'list', '--workspace', ws]);
   if (tabs.error) return tabs;
   if (!Array.isArray(tabs.result.tabs)) return { error: 'herdr tab list has no tabs array' };
@@ -88,6 +95,33 @@ export function workerPane(deps, feature, path) {
   const args = ['pane', 'split', target.pane_id, '--direction', direction, '--cwd', path];
   const split = herdr(deps, [...args, ...envArgs, '--no-focus']);
   return split.error ? split : paneIdOf(split.result.pane);
+}
+
+/**
+ * The pane for a pair-mode worker (`start --here`): a split right of the caller's pane
+ * (`HERDR_PANE_ID`), renamed `orc:<task>`. Refuses while the caller's tab (`HERDR_TAB_ID`) already
+ * has an `orc:`-labelled pane: one worker at a time. `{ pane }` or `{ error }`.
+ */
+export function herePane(deps, task, path) {
+  const { env } = deps;
+  const listed = herdr(deps, ['pane', 'list', '--workspace', env.HERDR_WORKSPACE_ID]);
+  if (listed.error) return listed;
+  if (!Array.isArray(listed.result.panes)) return { error: 'herdr pane list has no panes array' };
+  const busy = listed.result.panes.find(
+    (p) => p?.tab_id === env.HERDR_TAB_ID && String(p.label).startsWith('orc:'),
+  );
+  if (busy) return { error: `orc: close ${busy.label} first` };
+  const args = ['pane', 'split', env.HERDR_PANE_ID, '--direction', 'right', '--cwd', path];
+  const split = herdr(deps, [...args, ...workerEnv(env), '--no-focus']);
+  if (split.error) return split;
+  const found = paneIdOf(split.result.pane);
+  if (found.error) return found;
+  const renamed = herdr(deps, ['pane', 'rename', found.pane, `orc:${task}`]);
+  if (renamed.error) {
+    herdr(deps, ['pane', 'close', found.pane]); // unlabelled, `close` would refuse it later
+    return renamed;
+  }
+  return found;
 }
 
 /**
@@ -118,8 +152,8 @@ function clearReport(deps, path) {
  * Opens a pane and starts the agent in it: `{ pane, blocked }` or `{ error }`. A failed start
  * closes the pane it just opened.
  */
-function launch(deps, name, kind, feature, path) {
-  const found = workerPane(deps, feature, path);
+function launch(deps, name, kind, { feature, task, here }, path) {
+  const found = here ? herePane(deps, task, path) : workerPane(deps, feature, path);
   if (found.error) return found;
   const model = deps.env.ORC_LEVEL === 'high' ? 'opus' : 'sonnet';
   const native =
@@ -139,16 +173,26 @@ function launch(deps, name, kind, feature, path) {
  * when a dialog (`agent_not_ready` / `agent_blocked`) kept the prompt from being delivered; `state`
  * is the agent status after submission. Re-runnable: when the worktree's agent already exists
  * (the user has since cleared the dialog), it skips the pane and agent start and only sends the
- * prompt.
+ * prompt. `here` (pair mode) opens the pane with `herePane` and first git-ignores `<path>/.orc/`,
+ * since `path` is then the session checkout, not a task worktree.
  */
-export function start(deps, cwd, { feature, task, path, kind, brief }) {
+export function start(deps, cwd, { feature, task, path, kind, brief, here }) {
   const abs = resolve(cwd, path);
   const name = agentName(task, abs);
+  if (here) {
+    if (!deps.env.HERDR_PANE_ID) return fail('orc: --here needs HERDR_PANE_ID', { task });
+    const ignoreErr = ensureIgnored(deps, abs);
+    if (ignoreErr !== null) return fail(ignoreErr, { task });
+  }
   const existing = herdr(deps, ['agent', 'get', name]);
   let launched;
-  if (existing.code === 'agent_not_found') launched = launch(deps, name, kind, feature, abs);
-  else if (existing.error) return fail(existing.error, { task });
-  else launched = { ...paneIdOf(existing.result.agent), blocked: false };
+  if (existing.code === 'agent_not_found') {
+    launched = launch(deps, name, kind, { feature, task, here }, abs);
+  } else if (existing.error) {
+    return fail(existing.error, { task });
+  } else {
+    launched = { ...paneIdOf(existing.result.agent), blocked: false };
+  }
   if (launched.error) return fail(launched.error, { task });
   const base = { task, name, pane: launched.pane, path: abs, kind };
   if (launched.blocked) {
@@ -250,9 +294,9 @@ export function prompt(deps, cwd, { task, path, text, file }) {
 }
 
 /**
- * Closes the task's pane, but only when it sits in an `orc:*` tab (the tab `start` creates).
- * Not a cwd check: after `orc wt merge`, worktrunk moves the worktree (and the agent's cwd) to
- * `.git/wt/trash/`.
+ * Closes the task's pane, but only when it sits in an `orc:*` tab (the tab `start` creates) or is
+ * itself labelled `orc:*` (the pane `start --here` splits off). Not a cwd check: after
+ * `orc wt merge`, worktrunk moves the worktree (and the agent's cwd) to `.git/wt/trash/`.
  */
 export function close(deps, cwd, { task, path }) {
   const name = agentName(task, resolve(cwd, path));
@@ -264,11 +308,16 @@ export function close(deps, cwd, { task, path }) {
     const tabInfo = herdr(deps, ['tab', 'get', tab]);
     if (tabInfo.error) return fail(tabInfo.error, { task });
     label = tabInfo.result.tab?.label;
+    if (!String(label).startsWith('orc:')) {
+      const paneInfo = herdr(deps, ['pane', 'get', pane]);
+      if (paneInfo.error) return fail(paneInfo.error, { task });
+      label = paneInfo.result.pane?.label;
+    }
   }
   if (typeof label !== 'string' || !label.startsWith('orc:')) {
     return {
       code: 1,
-      result: { status: 'refused', task, stderr: `orc: ${name} is not in an orc:* tab` },
+      result: { status: 'refused', task, stderr: `orc: ${name} is not in an orc:* tab or pane` },
     };
   }
   const closed = herdr(deps, ['pane', 'close', pane]);
@@ -278,7 +327,8 @@ export function close(deps, cwd, { task, path }) {
 
 /**
  * `orc pane start|wait|prompt|close`. `deps`: `exec` (never throws), `readFile(path)` (utf8),
- * `unlink(path)`, `env`, `hasCommand(name, PATH)`, plugin `root`. Returns `{ code, result }`; `result` is the
+ * `unlink(path)`, `mkdir(path)` (recursive), `append(path, text)`, `env`, `hasCommand(name, PATH)`,
+ * plugin `root`. Returns `{ code, result }`; `result` is the
  * JSON document to print.
  */
 export function run(argv, deps, cwd) {
@@ -298,6 +348,7 @@ export function run(argv, deps, cwd) {
         timeout: { type: 'string' },
         text: { type: 'string' },
         file: { type: 'string' },
+        here: { type: 'boolean' },
       },
     });
   } catch (e) {
